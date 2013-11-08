@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<openerp>
+    <data>
+
+        <!-- Top menu item -->
+        <menuitem name="FnxSR" id="menu_fnx_sr_root" groups="group_fnx_sr_manager,group_fnx_sr_user"/>
+
+        <record model="ir.ui.view" id="fnx_sr_calendar">
+            <field name="name">fnx.sr.calendar</field>
+            <field name="model">fnx.sr.shipping</field>
+            <field name="arch" type="xml">
+                <calendar string="Calendar View" color="direction" date_start="appointment">
+                    <field name="local_source_document"/>
+                    <field name="partner_id"/>
+                </calendar>
+            </field>
+        </record>
+
+        <record model="ir.ui.view" id="fnx_sr_tree">
+            <field name="name">fnx.sr.tree</field>
+            <field name="model">fnx.sr.shipping</field>
+            <field name="arch" type="xml">
+                <tree string="Tree View" toolbar="1">
+                    <field name="appointment"/>
+                    <field name="local_source_document"/>
+                    <field name="partner_source_document"/>
+                    <field name="state"/>
+                </tree>
+            </field>
+        </record>
+
+        <record model="ir.ui.view" id="fnx_sr_form">
+            <field name="name">fnx.sr.form</field>
+            <field name="model">fnx.sr.shipping</field>
+            <field name="arch" type="xml">
+                <form string="Shipping &amp; Receiving" version="7.0">
+                    <header>
+                        <button string="Confirm Schedule" name="sr_schedule" class="oe_highlight" states="draft,appt," type="object" />
+                        <button string="Done" name="sr_complete" states="draft,scheduled,appt,ready" type="object" />
+                        <button string="Cancel" name="sr_cancel" states="draft,scheduled,appt,ready,complete" type="object"/>
+                        <field name="state" widget="statusbar" statusbar_visible="draft,scheduled,ready,complete" />
+                    </header>
+                    <sheet>
+                        <group>
+                            <group>
+                                <field name="direction"/>
+                                <field name="local_source_document"/>
+                                <field name="partner_id"/>
+                                <field name="partner_source_document"/>
+                            </group>
+                            <group>
+                                <field name="weight"/>
+                                <field name="cartons"/>
+                                <field name="pallets"/>
+                            </group>
+                        </group>
+                        <group>
+                            <group>
+                                <field name="carrier_id"/>
+                                <field name="appointment"/>
+                                <field name="actual"/>
+                                <field name="duration" widget="float_time"/>
+                            </group>
+                            <group>
+                                <field name="appt_scheduled_by_id" attrs="{'readonly':True}"/>
+                                <field name="appt_confirmed_on" attrs="{'readonly':True}"/>
+                            </group>
+                        </group>
+                        <notebook>
+                            <page string="Warehouse Comments">
+                                <field name="warehouse_comment" nolabel="1"/>
+                            </page>
+                            <page string="Order Comments">
+                                <field name="comment"/>
+                            </page>
+                        </notebook>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record model="ir.actions.act_window" id="action_fnx_sr_form">
+            <field name="name">Shipping &amp; Receiving</field>
+            <field name="res_model">fnx.sr.shipping</field>
+            <field name="view_type">form</field>
+            <field name="view_id" ref="fnx_sr_tree"/>
+            <field name="view_mode">tree,form,calendar</field>
+            <!-- <field name="search_view_id" ref="..."/> -->
+        </record>
+
+        <menuitem
+            name="Shipping &amp; Receiving"
+            id="menu_fnx_sr_shipping"
+            parent="menu_fnx_sr_root"
+            sequence="10"
+            />
+
+        <menuitem
+            name="Schedule"
+            id="menu_item_fnx_sr_schedule"
+            parent="menu_fnx_sr_shipping"
+            sequence="10"
+            action="action_fnx_sr_form"
+            />
+
+    </data>
+</openerp>
