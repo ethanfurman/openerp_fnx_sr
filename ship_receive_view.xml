@@ -9,9 +9,11 @@
             <field name="name">fnx.sr.calendar</field>
             <field name="model">fnx.sr.shipping</field>
             <field name="arch" type="xml">
-                <calendar string="Calendar View" color="direction" date_start="appointment">
+                <calendar string="Calendar View" color="direction" date_start="appointment_date">
                     <field name="local_source_document"/>
                     <field name="partner_id"/>
+                    <field name="partner_source_document"/>
+                    <field name="carrier_id"/>
                 </calendar>
             </field>
         </record>
@@ -20,9 +22,12 @@
             <field name="name">fnx.sr.tree</field>
             <field name="model">fnx.sr.shipping</field>
             <field name="arch" type="xml">
-                <tree string="Tree View" toolbar="1">
-                    <field name="appointment"/>
+                <tree string="Tree View" toolbar="1" create="false">
+                    <field name="direction"/>
+                    <field name="appointment_date"/>
+                    <field name="appointment_time"/>
                     <field name="local_source_document"/>
+                    <field name="partner_id"/>
                     <field name="partner_source_document"/>
                     <field name="state"/>
                 </tree>
@@ -33,45 +38,68 @@
             <field name="name">fnx.sr.form</field>
             <field name="model">fnx.sr.shipping</field>
             <field name="arch" type="xml">
-                <form string="Shipping &amp; Receiving" version="7.0">
+                <form string="Shipping &amp; Receiving" version="7.0" create="false">
                     <header>
-                        <button string="Confirm Schedule" name="sr_schedule" class="oe_highlight" states="draft,appt," type="object" />
-                        <button string="Done" name="sr_complete" states="draft,scheduled,appt,ready" type="object" />
-                        <button string="Cancel" name="sr_cancel" states="draft,scheduled,appt,ready,complete" type="object"/>
                         <field name="state" widget="statusbar" statusbar_visible="draft,scheduled,ready,complete" />
                     </header>
                     <sheet>
                         <group>
                             <group>
-                                <field name="direction"/>
-                                <field name="local_source_document"/>
-                                <field name="partner_id"/>
-                                <field name="partner_source_document"/>
-                            </group>
-                            <group>
-                                <field name="weight"/>
-                                <field name="cartons"/>
-                                <field name="pallets"/>
+                                <div>
+                                    <h1>
+                                        <field name="local_source_document" attrs="{'readonly':True}"/>
+                                    </h1>
+                                    <h3>
+                                        <field name="direction" class="oe_inline" attrs="{'readonly':True}"/>
+                                        <field name="partner_source_document" class="oe_inline" attrs="{'invisible':[('partner_source_document','=',False)], 'readonly':True}"/>
+                                        via
+                                        <field name="carrier_id" class="oe_inline"/>
+                                        <field name="preposition" class="oe_inline" attrs="{'readonly':True}"/>
+                                        <field name="partner_id" class="oe_inline" attrs="{'readonly':True}"/>
+                                    </h3>
+                                </div>
+                                <div class="oe_right oe_button_box">
+                                    <button string="Confirm Carrier Appt" name="sr_schedule" class="oe_highlight" states="draft,appt," type="object" />
+                                    <button string="Driver Check-In" name="sr_checkin" states="draft,scheduled,appt,ready" type="object" />
+                                    <button string="Driver Check-Out" name="sr_complete" states="checked_in" type="object"/>
+                                </div>
                             </group>
                         </group>
                         <group>
                             <group>
-                                <field name="carrier_id"/>
-                                <field name="appointment"/>
-                                <field name="actual"/>
+                                <field name="appointment_date" class="oe_inline"/>
+                                <field name="appointment_time" class="oe_inline" widget="float_time"/>
+                                <separator colspan="2"/>
+                                <field name="check_in" attrs="{'readonly':[('is_manager','=',False)]}"/>
+                                <field name="check_out" attrs="{'readonly':[('is_manager','=',False)]}"/>
                                 <field name="duration" widget="float_time"/>
                             </group>
                             <group>
-                                <field name="appt_scheduled_by_id" attrs="{'readonly':True}"/>
-                                <field name="appt_confirmed_on" attrs="{'readonly':True}"/>
+                                <field name="weight" attrs="{'readonly':True}"/>
+                                <field name="cartons" attrs="{'readonly':True}"/>
+                                <field name="pallets" attrs="{'readonly':True}"/>
+                                <separator colspan="2"/>
+                                <field name="appt_scheduled_by_id" attrs="{'readonly':[('is_manager','=',False)]}"/>
+                                <field name="appt_confirmed_on" attrs="{'readonly':[('is_manager','=',False)]}"/>
+                                <field name="is_manager" attrs="{'invisible':True}"/>
                             </group>
                         </group>
                         <notebook>
                             <page string="Warehouse Comments">
-                                <field name="warehouse_comment" nolabel="1"/>
+                                <field name="warehouse_comment" nolabel="1" attrs="{'readonly':True}"/>
                             </page>
                             <page string="Order Comments">
                                 <field name="comment"/>
+                            </page>
+                            <page string="Manager Overrides" attrs="{'invisible':[('is_manager','=',False)]}">
+                                <separator string="Reset state to"/>
+                                <button string="Order Placed" name="sr_draft" type="object" />
+                                <button string="Scheduled" name="sr_schedule" type="object" />
+                                <button string="Ready, needs Appt" name='sr_appointment' type="object" />
+                                <button string="Ready" name="sr_ready" type="object" />
+                                <button string="Checked-In" name="sr_checkin" type="object" />
+                                <button string="Complete" name="sr_complete" type="object" />
+                                <button string="Cancelled" name="sr_cancel" type="object" />
                             </page>
                         </notebook>
                     </sheet>

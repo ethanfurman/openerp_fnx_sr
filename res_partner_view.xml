@@ -8,11 +8,12 @@
                 <field eval="18" name="priority"/>
                 <field name="arch" type="xml">
                     <field name="supplier" position="after">
-                        <field name="is_carrier" attrs="{'invisible=':[('is_company','=','False')]}"/>
-                        <field name="is_driver" attrs="{'invisible=':[('is_company','=','True')]}"/>
+                        <field name="is_carrier" />
+                        <field name="fuel_surcharge" />
+                        <field name="is_driver"/>
                     </field>
                     <page name="page_history" position="before">
-                        <page string="warehouse">
+                        <page string="Warehouse">
                             <field name="warehouse_comment" nolabel="1"/>
                         </page>
                     </page>

@@ -6,7 +6,7 @@ from openerp import tools
 from openerp.osv import fields, osv
 from openerp.tools import float_compare, DEFAULT_SERVER_DATETIME_FORMAT
 from openerp.tools.translate import _
-from VSS.dbf import Date, DateTime, Time
+from fnx import Date, DateTime, Time, float
 import logging
 import openerp.addons.decimal_precision as dp
 
@@ -49,13 +49,36 @@ class fnx_sr_shipping(osv.Model):
     _inherits = {
         'res.partner': 'partner_id',
         }
-    _order = 'appointment desc'
+    _order = 'appointment_date desc, appointment_time asc'
+
+    def _calc_duration(self, cr, uid, ids, field, _arg, context=None):
+        if not ids:
+            return {}
+        current = self.browse(cr, uid, ids, context=context)[0]
+        result = {}
+        for id in ids:
+            result[id] = False
+            if current.check_in and current.check_out:
+                result[id] = float(current.check_out - current.check_in)
+        return result
+
+    def _current_user_is_manager(self, cr, uid, ids, field, _arg, context=None):
+        res_users = self.pool.get('res.users')
+        result= {}
+        for id in ids:
+            result[id] = res_users.has_group(cr, uid, 'fnx_sr.group_fnx_sr_manager')
+        return result
+
     _columns = {
 
         'direction': fields.selection([('incoming', 'Receiving'), ('outgoing', 'Sending')], "Type of shipment", required=True),
-        'local_source_document': fields.char('Our PO or Sales #', size=32),
-        'partner_source_document': fields.char('Their PO or Sales #', size=32),
-        'partner_id': fields.many2one('res.partner', 'Vendor/Customer', required=True, ondelete='restrict'),
+        'local_contact': fields.many2one('res.users', 'Local employee', ondelete='restrict'),
+        'job_title': fields.selection([('sales', 'Sales Rep:'), ('purchasing', 'Purchaser:')], 'Job Title'),
+        'preposition': fields.selection([('sales', 'to '), ('purchasing', 'from ')], 'Type of order'),
+        'local_source_document': fields.char('Our document', size=32),
+        'partner_source_document_type': fields.selection([('sales', 'Purchase Order:'), ('purchasing', 'Sales Order:')], 'Type of order'),
+        'partner_source_document': fields.char('Their document', size=32),
+        'partner_id': fields.many2one('res.partner', 'Partner', required=True, ondelete='restrict'),
 
         'weight': fields.float('Weight'),
         'cartons': fields.integer('# of cartons'),
@@ -65,6 +88,7 @@ class fnx_sr_shipping(osv.Model):
             ('scheduled', 'Scheduled'),
             ('appt', 'Ready, needs Appt'),
             ('ready', 'Ready'),
+            ('checked_in', 'Loading/Unloading'),
             ('complete', 'Complete'),
             ('cancelled', 'Cancelled'),
             ], 'Status',
@@ -77,18 +101,16 @@ class fnx_sr_shipping(osv.Model):
         'comment': fields.text('Comments', help="Comment or instructions for this order only."),
         #'warehouse_comment': fields.text('Warehouse comment', help="Comment from FIS."),
 
-        'carrier_id': fields.many2one('res.partner', 'Shipment Carrier'),
-        'appointment': fields.datetime('Scheduled arrival time', help="Time when driver should arrive."),
-        'actual': fields.datetime('Actual arrival time', help="Time that driver actually arrived."),
-        'duration': fields.float('Duration (in hours)'),
+        'carrier_id': fields.many2one('res.partner', 'Shipper'),
+        'appointment_date': fields.date('Appointment date', help="Date when driver should arrive."),
+        'appointment_time': fields.date('Appointment time', help="Time when driver should arrive."),
+        'duration': fields.function(_calc_duration, type='float', string='Duration (in hours)'),
         'appt_scheduled_by_id': fields.many2one('res.users', 'Scheduled by', help="Falcon employee that scheduled appointment."),
         'appt_confirmed': fields.boolean('Appointment confirmed'),
         'appt_confirmed_on': fields.datetime('Confirmed on', help="When the appointment was confirmed with the carrier"),
-        #'appt_status': fields.selection([('draft', 'Tentative'), ('confirmed', 'Confirmed'), ('complete', 'Complete')], 'Appt Status',
-        #    help="Tentative --> Ball-park date.\n"
-        #         "Confirmed --> Definite date provided by carrier.\n"
-        #         "Complete  --> Order shipped.\n"),
-
+        'check_in': fields.datetime('Driver checked in at',),
+        'check_out': fields.datetime('Driver checked out at'),
+        'is_manager': fields.function(_current_user_is_manager, type='boolean'),
         }
 
 
@@ -103,7 +125,7 @@ class fnx_sr_shipping(osv.Model):
     def sr_schedule(self, cr, uid, ids, context=None):
         print "sr_schedule", uid
         current = self.browse(cr, uid, ids, context=context)[0]
-        if current.appointment:
+        if current.appointment_date and current.appointment_time:
             self.write(cr, uid, ids,
                     {
                     'state': 'scheduled',
@@ -124,9 +146,21 @@ class fnx_sr_shipping(osv.Model):
         self.write(cr, uid, ids, {'state':'ready'}, context=context)
         return True
 
+    def sr_checkin(self, cr, uid, ids, context=None):
+        values = {
+                'state':'checked_in',
+                'check_in': DateTime.now(),
+                } 
+        self.write(cr, uid, ids, values, context=context)
+        return True
+
     def sr_complete(self, cr, uid, ids, context=None):
         print "sr_complete"
-        self.write(cr, uid, ids, {'state':'complete'}, context=context)
+        values = {
+                'state':'complete',
+                'check_out': DateTime.now(),
+                } 
+        self.write(cr, uid, ids, values, context=context)
         return True
 
     def sr_cancel(self, cr, uid, ids, context=None):
