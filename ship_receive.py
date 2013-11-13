@@ -46,20 +46,20 @@ fnx_sr_appointment()
 class fnx_sr_shipping(osv.Model):
     _name = 'fnx.sr.shipping'
     _description = 'shipping & receiving entries'
-    _inherits = {
-        'res.partner': 'partner_id',
-        }
     _order = 'appointment_date desc, appointment_time asc'
+    _rec_name = 'local_source_document'
 
     def _calc_duration(self, cr, uid, ids, field, _arg, context=None):
         if not ids:
             return {}
-        current = self.browse(cr, uid, ids, context=context)[0]
         result = {}
         for id in ids:
+            record = self.browse(cr, uid, id, context=context)
             result[id] = False
-            if current.check_in and current.check_out:
-                result[id] = float(current.check_out - current.check_in)
+            if record.check_in and record.check_out:
+                check_in = DateTime(record.check_in)
+                check_out = DateTime(record.check_out)
+                result[id] = float(check_out - check_in)
         return result
 
     def _current_user_is_manager(self, cr, uid, ids, field, _arg, context=None):
@@ -69,10 +69,21 @@ class fnx_sr_shipping(osv.Model):
             result[id] = res_users.has_group(cr, uid, 'fnx_sr.group_fnx_sr_manager')
         return result
 
+    def _res_partner_warehouse_comment(self, cr, uid, ids, field, _arg, context=None):
+        if not ids:
+            return {}
+        result = {}
+        res_partner = self.pool.get('res.partner')
+        for id in ids:
+            record = self.browse(cr, uid, id, context=context)
+            partner = res_partner.browse(cr, uid, record.partner_id)
+            result[id] = partner.warehouse_comment
+        return result
+
     _columns = {
 
         'direction': fields.selection([('incoming', 'Receiving'), ('outgoing', 'Sending')], "Type of shipment", required=True),
-        'local_contact_ids': fields.many2many('res.users', 'users_shipping_rel', 'user_id', 'contact_id', 'Local employee', ondelete='restrict'),
+        'local_contact_ids': fields.many2many('res.users', 'users_shipping_rel', 'user_id', 'ship_id', string='Local employee', ondelete='restrict'),
         'job_title': fields.selection([('sales', 'Sales Rep:'), ('purchasing', 'Purchaser:')], 'Job Title'),
         'preposition': fields.selection([('sales', 'to '), ('purchasing', 'from ')], 'Type of order'),
         'local_source_document': fields.char('Our document', size=32),
@@ -111,6 +122,7 @@ class fnx_sr_shipping(osv.Model):
         'check_in': fields.datetime('Driver checked in at',),
         'check_out': fields.datetime('Driver checked out at'),
         'is_manager': fields.function(_current_user_is_manager, type='boolean'),
+        'warehouse_comment': fields.function(_res_partner_warehouse_comment, type='char')
         }
 
 
