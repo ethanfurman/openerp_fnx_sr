@@ -114,7 +114,7 @@ class fnx_sr_shipping(osv.Model):
 
         'carrier_id': fields.many2one('res.partner', 'Shipper'),
         'appointment_date': fields.date('Appointment date', help="Date when driver should arrive."),
-        'appointment_time': fields.date('Appointment time', help="Time when driver should arrive."),
+        'appointment_time': fields.float('Appointment time', help="Time when driver should arrive."),
         'duration': fields.function(_calc_duration, type='float', string='Duration (in hours)'),
         'appt_scheduled_by_id': fields.many2one('res.users', 'Scheduled by', help="Falcon employee that scheduled appointment."),
         'appt_confirmed': fields.boolean('Appointment confirmed'),
@@ -131,52 +131,91 @@ class fnx_sr_shipping(osv.Model):
         return super(fnx_sr_shipping, self).create(cr, uid, values, context=context)
 
     def sr_draft(self, cr, uid, ids, context=None):
-        print "sr_draft"
+        if context is None:
+            context = {}
+        override = context.get('manager_override')
+        values = {'state':'draft'}
+        if override:
+            values['appointment_time'] = 0.0
+            values['appt_confirmed'] = False
+            values['appt_confirmed_on'] = False
+            values['appt_scheduled_by_id'] = False
+            values['check_in'] = False
+            values['check_out'] = False
         self.write(cr, uid, ids, {'state':'draft'}, context=context)
 
     def sr_schedule(self, cr, uid, ids, context=None):
-        print "sr_schedule", uid
+        if context is None:
+            context = {}
+        override = context.get('manager_override')
         current = self.browse(cr, uid, ids, context=context)[0]
         if current.appointment_date and current.appointment_time:
-            self.write(cr, uid, ids,
-                    {
+            values = {
                     'state': 'scheduled',
-                    'appt_scheduled_by_id': uid,
+                    'appt_scheduled_by_id': current.appt_scheduled_by_id or uid,
                     'appt_confirmed': True,
-                    'appt_confirmed_on': DateTime.now(),
+                    'appt_confirmed_on': current.appt_confirmed_on or DateTime.now(),
                     },
-                    context=context)
+            if override:
+                values['check_in'] = False
+                values['check_out'] = False
+            self.write(cr, uid, ids, values, context=context)
             return True
         return False
 
     def sr_appointment(self, cr, uid, ids, context=None):
-        print "sr_appointment"
-        self.write(cr, uid, ids, {'state':'appt'}, context=context)
+        if context is None:
+            context = {}
+        override = context.get('manager_override')
+        values = {'state':'appt'}
+        if override:
+            values['appointment_time'] = 0.0
+            values['appt_confirmed'] = False
+            values['appt_confirmed_on'] = False
+            values['appt_scheduled_by_id'] = False
+            values['check_in'] = False
+            values['check_out'] = False
+        self.write(cr, uid, ids, values, context=context)
 
     def sr_ready(self, cr, uid, ids, context=None):
-        print "sr_ready"
-        self.write(cr, uid, ids, {'state':'ready'}, context=context)
+        if context is None:
+            context = {}
+        override = context.get('manager_override')
+        values = {'state':'ready'}
+        if override:
+            values['check_in'] = False
+            values['check_out'] = False
+        self.write(cr, uid, ids, values, context=context)
         return True
 
     def sr_checkin(self, cr, uid, ids, context=None):
+        if context is None:
+            context = {}
+        override = context.get('manager_override')
         values = {
                 'state':'checked_in',
                 'check_in': DateTime.now(),
-                } 
+                }
+        if override:
+            values['check_out'] = False
         self.write(cr, uid, ids, values, context=context)
         return True
 
     def sr_complete(self, cr, uid, ids, context=None):
-        print "sr_complete"
+        if context is None:
+            context = {}
+        override = context.get('manager_override')
         values = {
                 'state':'complete',
                 'check_out': DateTime.now(),
-                } 
+                }
+        if override:
+            current = self.browse(cr, uid, ids, context=context)[0]
+            values['check_out'] = current.check_out
         self.write(cr, uid, ids, values, context=context)
         return True
 
     def sr_cancel(self, cr, uid, ids, context=None):
-        print "sr_cancel"
         self.write(cr, uid, ids, {'state':'cancelled'}, context=context)
         return True
 

@@ -93,13 +93,13 @@
                             </page>
                             <page string="Manager Overrides" attrs="{'invisible':[('is_manager','=',False)]}">
                                 <separator string="Reset state to"/>
-                                <button string="Order Placed" name="sr_draft" type="object" />
-                                <button string="Scheduled" name="sr_schedule" type="object" />
-                                <button string="Ready, needs Appt" name='sr_appointment' type="object" />
-                                <button string="Ready" name="sr_ready" type="object" />
-                                <button string="Checked-In" name="sr_checkin" type="object" />
-                                <button string="Complete" name="sr_complete" type="object" />
-                                <button string="Cancelled" name="sr_cancel" type="object" />
+                                <button string="Order Placed" name="sr_draft" type="object" context="{'manager_override':True}"/>
+                                <button string="Scheduled" name="sr_schedule" type="object" context="{'manager_override':True}"/>
+                                <button string="Ready, needs Appt" name='sr_appointment' type="object" context="{'manager_override':True}"/>
+                                <button string="Ready" name="sr_ready" type="object" context="{'manager_override':True}"/>
+                                <button string="Checked-In" name="sr_checkin" type="object" context="{'manager_override':True}"/>
+                                <button string="Complete" name="sr_complete" type="object" context="{'manager_override':True}"/>
+                                <button string="Cancelled" name="sr_cancel" type="object" context="{'manager_override':True}"/>
                             </page>
                         </notebook>
                     </sheet>
