@@ -5,6 +5,7 @@ from VSS import Date
 from VSS.path import Path, listdir, glob
 from VSS.utils import PropertyDict
 import openerplib
+import shutil
 import time
 
 SOURCE = Path('/var/fis/')
@@ -26,7 +27,7 @@ def archive(file, dest=ARCHIVE):
 
 def get_order(order):
     g = {}
-    execfile(file, g)
+    execfile(order, g)
     return PropertyDict(g['order'])
 
 def update_order(values):
