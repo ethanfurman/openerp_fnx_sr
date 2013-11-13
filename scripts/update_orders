@@ -21,6 +21,14 @@ module = {
     'carrier':  'F27',
     }
 
+def archive(file, dest=ARCHIVE):
+    shutil.move(file, dest)
+
+def get_order(order):
+    g = {}
+    execfile(file, g)
+    return PropertyDict(g['order'])
+
 def update_order(values):
     local_contacts = values.pop('local_contact', None)
     if local_contacts is not None:
@@ -37,10 +45,6 @@ def update_order(values):
         carrier_xmlid = OE.res_partner.search_read(fields=['id'], domain=[('module','=',module['carrier']),('xml_id','=',carrier_xmlid)])
         carrier_id = carrier_xmlid[0]['id']
         values.carrier_id = carrier_id
-    #appt = values.pop('appointment_date', None)
-    #if appt is not None:
-    #    values.appointment_date = Date.fromymd(appt).date().isoformat()
-    #    print 7, values.appointment_date
     direction = values.get('direction')
     if direction == 'incoming':
         values.job_title = values.preposition = values.partner_source_document_type = 'purchasing'
@@ -78,7 +82,6 @@ def main(file_to_process='', hostname='localhost', db=DB, user=USER, password=PW
     else:
         files = [SOURCE/f for f in SOURCE.listdir() if f != 'order_template']
 
-
     OE.conn = conn = openerplib.get_connection(hostname='localhost', database=db, login=user, password=password)
     OE.res_partner = conn.get_model('res.partner')
     OE.res_users = conn.get_model('res.users')
@@ -86,27 +89,17 @@ def main(file_to_process='', hostname='localhost', db=DB, user=USER, password=PW
 
     retry = []
     failed = []
-    for file in files:
-        try:
-            g = {}
-            execfile(file, g)
-            order = PropertyDict(g['order'])
-            update_order(order)
-        except Exception:
-            log_exception()
-            retry.append(file)
-    if retry:
-        raise Exception("Unable to process orders: %r" % ', '.join(failed))
+    for group in ((files, retry), (retry, failed)):
         time.sleep(5)
-        for file in retry:
+        trying, failing = group
+        for file in trying:
             try:
-                g = {}
-                execfile(file, g)
-                order = PropertyDict(g['order'])
+                order = get_order(file)
                 update_order(order)
+                archive(file)
             except Exception:
                 log_exception()
-                failed.append(file)
+                failing.append(file)
     if failed:
         raise Exception("Unable to process orders: %r" % ', '.join(failed))
 
