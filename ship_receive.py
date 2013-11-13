@@ -47,7 +47,13 @@ class fnx_sr_shipping(osv.Model):
     _name = 'fnx.sr.shipping'
     _description = 'shipping & receiving entries'
     _order = 'appointment_date desc, appointment_time asc'
-    _rec_name = 'local_source_document'
+    _rec_name = 'name'
+
+    def _document_name_get(self, cr, uid, ids, _field, _arg, context=None):
+        result = {}
+        for record in self.browse(cr, uid, ids, context=context):
+            result[record.id] = {'incoming':'PO ', 'outgoing':'Inv '}[record.direction] + record.local_source_document
+        return result
 
     def _calc_duration(self, cr, uid, ids, field, _arg, context=None):
         if not ids:
@@ -82,6 +88,7 @@ class fnx_sr_shipping(osv.Model):
 
     _columns = {
 
+        'name': fields.function(_document_name_get, type='char', string='Document', store=True),
         'direction': fields.selection([('incoming', 'Receiving'), ('outgoing', 'Sending')], "Type of shipment", required=True),
         'local_contact_ids': fields.many2many('res.users', 'users_shipping_rel', 'user_id', 'ship_id', string='Local employee', ondelete='restrict'),
         'job_title': fields.selection([('sales', 'Sales Rep:'), ('purchasing', 'Purchaser:')], 'Job Title'),

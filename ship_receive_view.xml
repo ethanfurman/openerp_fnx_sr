@@ -10,7 +10,7 @@
             <field name="model">fnx.sr.shipping</field>
             <field name="arch" type="xml">
                 <calendar string="Calendar View" color="direction" date_start="appointment_date">
-                    <field name="local_source_document"/>
+                    <field name="name"/>
                     <field name="partner_id"/>
                     <field name="partner_source_document"/>
                     <field name="carrier_id"/>
@@ -25,8 +25,8 @@
                 <tree string="Tree View" toolbar="1" create="false">
                     <field name="direction"/>
                     <field name="appointment_date"/>
-                    <field name="appointment_time"/>
-                    <field name="local_source_document"/>
+                    <field name="appointment_time" widget="float_time"/>
+                    <field name="name"/>
                     <field name="partner_id"/>
                     <field name="partner_source_document"/>
                     <field name="state"/>
@@ -47,7 +47,7 @@
                             <group>
                                 <div>
                                     <h1>
-                                        <field name="local_source_document" attrs="{'readonly':True}"/>
+                                        <field name="name" attrs="{'readonly':True}"/>
                                     </h1>
                                     <h3>
                                         <field name="direction" class="oe_inline" attrs="{'readonly':True}"/>
@@ -59,7 +59,7 @@
                                     </h3>
                                 </div>
                                 <div class="oe_right oe_button_box">
-                                    <button string="Confirm Carrier Appt" name="sr_schedule" class="oe_highlight" states="draft,appt," type="object" />
+                                    <button string="Confirm Carrier Appt" name="sr_schedule" states="draft,appt," type="object" />
                                     <button string="Driver Check-In" name="sr_checkin" states="draft,scheduled,appt,ready" type="object" />
                                     <button string="Driver Check-Out" name="sr_complete" states="checked_in" type="object"/>
                                 </div>
