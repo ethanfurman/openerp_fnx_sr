@@ -155,7 +155,7 @@ class fnx_sr_shipping(osv.Model):
                     'appt_scheduled_by_id': current.appt_scheduled_by_id or uid,
                     'appt_confirmed': True,
                     'appt_confirmed_on': current.appt_confirmed_on or DateTime.now(),
-                    },
+                    }
             if override:
                 values['check_in'] = False
                 values['check_out'] = False
