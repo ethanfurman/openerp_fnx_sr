@@ -119,7 +119,7 @@ class fnx_sr_shipping(osv.Model):
         'comment': fields.text('Comments', help="Comment or instructions for this order only."),
         #'warehouse_comment': fields.text('Warehouse comment', help="Comment from FIS."),
 
-        'carrier_id': fields.many2one('res.partner', 'Shipper'),
+        'carrier_id': fields.many2one('res.partner', 'Shipper', domain=[('is_carrier','=',True)]),
         'appointment_date': fields.date('Appointment date', help="Date when driver should arrive."),
         'appointment_time': fields.float('Appointment time', help="Time when driver should arrive."),
         'duration': fields.function(_calc_duration, type='float', string='Duration (in hours)'),
