@@ -22,8 +22,17 @@ module = {
     'carrier':  'F27',
     }
 
-def archive(file, dest=ARCHIVE):
-    shutil.move(file, dest)
+def archive(src_file, dest=ARCHIVE):
+    existing = glob(dest/src_file+'*')
+    src_file = Path(src_file)
+    if not existing:
+        dst_file = src_file.filename + '_01'
+    else:
+        existing.sort()
+        dst_file, count = existing[-1].split('_')
+        count = int(count) + 1
+        dst_file += '_%02d' % count
+    shutil.move(src_file, dest/dst_file)
 
 def get_order(order):
     g = {}
@@ -31,20 +40,32 @@ def get_order(order):
     return PropertyDict(g['order'])
 
 def update_order(values):
+    print values
     local_contacts = values.pop('local_contact', None)
+    #local_contacts = values.get('local_contact', None)
     if local_contacts is not None:
-        local_contacts = OE.res_users.search_read(fields=['id'], domain=[('login','in',local_contacts)])
+        if 'sysadmin' in local_contacts:
+            local_contacts.append('admin')
+        records = OE.res_users.search_read(fields=['id'], domain=[('login','in',local_contacts)])
         #local_contact_ids = [d['id'] for d in local_contacts]
-        values.local_contact_ids = [(6, 0, [lc['id'] for lc in local_contacts])]
+        values.local_contact_ids = [(6, 0, [lc['id'] for lc in records])]
     partner_xmlid = values.pop('partner_xmlid', None)
+    #partner_xmlid = values.get('partner_xmlid', None)
     if partner_xmlid is not None:
-        partner_xmlid = OE.res_partner.search_read(fields=['id', 'module', 'xml_id'], domain=[('module','=',module[values.direction]),('xml_id','=',partner_xmlid)])
-        partner_id = partner_xmlid[0]['id']
+        records = OE.res_partner.search_read(fields=['id', 'module', 'xml_id'], domain=[('module','=',module[values.direction]),('xml_id','=',partner_xmlid)])
+        if not records:
+            raise ValueError('unable to find partner %r' % partner_xmlid)
+        partner_id = records[0]['id']
         values.partner_id = partner_id
     carrier_xmlid = values.pop('carrier_xmlid', None)
-    if carrier_xmlid is not None:
-        carrier_xmlid = OE.res_partner.search_read(fields=['id'], domain=[('module','=',module['carrier']),('xml_id','=',carrier_xmlid)])
-        carrier_id = carrier_xmlid[0]['id']
+    #carrier_xmlid = values.get('carrier_xmlid', None)
+    print repr(carrier_xmlid)
+    if carrier_xmlid not in ('99', None):
+        print 'looking for carrier', carrier_xmlid
+        records = OE.res_partner.search_read(fields=['id'], domain=[('module','=',module['carrier']),('xml_id','=',carrier_xmlid)])
+        if not records:
+            raise ValueError('unable to find carrier %r' % carrier_xmlid)
+        carrier_id = records[0]['id']
         values.carrier_id = carrier_id
     direction = values.get('direction')
     if direction == 'incoming':
@@ -63,8 +84,14 @@ def update_order(values):
         break
     if not order:
         values.state = 'draft'
-    elif values.pallets and order['state'] not in ('checked_in', 'complete', 'cancelled'):
-        values.state = 'ready'
+    elif 'pallets' in values and values.pallets:
+        if order['state'] in ('checked_in', 'complete', 'cancelled'):
+            pass
+        elif order['state'] == 'scheduled':
+            values.state = 'ready'
+        else:
+            values.state = 'appt'
+    #if values.state: order['state'] == values.state
     if not order:
         OE.fnx_shipping.create(dict(values))
     else:
@@ -82,12 +109,14 @@ def main(file_to_process='', hostname='localhost', db=DB, user=USER, password=PW
         files = [file_to_process]
     else:
         files = [SOURCE/f for f in SOURCE.listdir() if f != 'order_template']
-
+    #
+    print files
+    #
     OE.conn = conn = openerplib.get_connection(hostname='localhost', database=db, login=user, password=password)
     OE.res_partner = conn.get_model('res.partner')
     OE.res_users = conn.get_model('res.users')
     OE.fnx_shipping = conn.get_model('fnx.sr.shipping')
-
+    #
     retry = []
     failed = []
     for group in ((files, retry), (retry, failed)):
@@ -96,6 +125,7 @@ def main(file_to_process='', hostname='localhost', db=DB, user=USER, password=PW
         for file in trying:
             try:
                 order = get_order(file)
+                #import pdb; pdb.set_trace()
                 update_order(order)
                 archive(file)
             except Exception:
