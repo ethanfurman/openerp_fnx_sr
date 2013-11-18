@@ -3,13 +3,13 @@
     <data>
 
         <!-- Top menu item -->
-        <menuitem name="FnxSR" id="menu_fnx_sr_root" groups="group_fnx_sr_manager,group_fnx_sr_user"/>
+        <menuitem name="FnxSR" id="menu_fnx_sr_root" groups="group_fnx_sr_manager,group_fnx_sr_user,group_fnx_sr_guest"/>
 
         <record model="ir.ui.view" id="fnx_sr_calendar">
             <field name="name">fnx.sr.calendar</field>
             <field name="model">fnx.sr.shipping</field>
             <field name="arch" type="xml">
-                <calendar string="Calendar View" color="direction" date_start="appointment_date">
+                <calendar string="Calendar View" color="state" date_start="appointment_date">
                     <field name="name"/>
                     <field name="partner_id"/>
                     <field name="partner_source_document"/>
@@ -53,15 +53,14 @@
                                         <field name="direction" class="oe_inline" attrs="{'readonly':True}"/>
                                         <field name="partner_source_document" class="oe_inline" attrs="{'invisible':[('partner_source_document','=',False)], 'readonly':True}"/>
                                         via
-                                        <field name="carrier_id" class="oe_inline"/>
+                                        <field name="carrier_id" class="oe_inline" options="{'create':False, 'create_edit':False, 'limit':15}"/>
                                         <field name="preposition" class="oe_inline" attrs="{'readonly':True}"/>
-                                        <field name="partner_id" class="oe_inline" attrs="{'readonly':True}"/>
+                                        <field name="partner_id" class="oe_inline" attrs="{'readonly':True}" options="{'create':False, 'create_edit':False, 'limit':0}"/>
                                     </h3>
                                 </div>
                                 <div class="oe_right oe_button_box">
-                                    <button string="Confirm Carrier Appt" name="sr_schedule" states="draft,appt," type="object" />
-                                    <button string="Driver Check-In" name="sr_checkin" states="draft,scheduled,appt,ready" type="object" />
-                                    <button string="Driver Check-Out" name="sr_complete" states="checked_in" type="object"/>
+                                    <button string="Driver Check-In" groups="fnx_sr.group_fnx_sr_user" name="sr_checkin" states="draft,scheduled,appt,ready" type="object" atts="{readonly':True}"/>
+                                    <button string="Driver Check-Out" groups="fnx_sr.group_fnx_sr_user" name="sr_complete" states="checked_in" type="object" atts="{readonly':True}"/>
                                 </div>
                             </group>
                         </group>

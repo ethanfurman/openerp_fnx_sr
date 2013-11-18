@@ -32,11 +32,18 @@
             <field name="description">Manage Shippping and Receiving</field>
         </record>
 
+        <record model="res.groups" id="group_fnx_sr_guest">
+            <field name="name">Guest</field>
+            <field name="category_id" ref="module_fnx_sr"/>
+            <field name="comment">The user has read-only acess.</field>
+            <!-- <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/> -->
+        </record>
+
         <record model="res.groups" id="group_fnx_sr_user">
             <field name="name">User</field>
             <field name="category_id" ref="module_fnx_sr"/>
-            <field name="comment">The user can have access.</field>
-            <!-- <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/> -->
+            <field name="comment">The user normal access.</field>
+            <field name="implied_ids" eval="[(4, ref('group_fnx_sr_guest'))]"/>
         </record>
 
         <record model="res.groups" id="group_fnx_sr_manager">
