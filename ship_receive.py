@@ -89,7 +89,7 @@ class fnx_sr_shipping(osv.Model):
     _columns = {
 
         'name': fields.function(_document_name_get, type='char', string='Document', store=True),
-        'direction': fields.selection([('incoming', 'Receiving'), ('outgoing', 'Sending')], "Type of shipment", required=True),
+        'direction': fields.selection([('incoming', 'Receiving'), ('outgoing', 'Shipping')], "Type of shipment", required=True),
         'local_contact_ids': fields.many2many('res.users', 'users_shipping_rel', 'user_id', 'ship_id', string='Local employee', ondelete='restrict'),
         'job_title': fields.selection([('sales', 'Sales Rep:'), ('purchasing', 'Purchaser:')], 'Job Title'),
         'preposition': fields.selection([('sales', 'to '), ('purchasing', 'from ')], 'Type of order'),
