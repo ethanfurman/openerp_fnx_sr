@@ -37,7 +37,9 @@ def archive(src_file, dest=ARCHIVE):
 def get_order(order):
     g = {}
     execfile(order, g)
-    return PropertyDict(g['order'])
+    result = PropertyDict(g['order'])
+    result.user = getpwuid(stat(order).st_uid).pw_name
+    return result
 
 def update_order(values):
     print values
@@ -48,7 +50,7 @@ def update_order(values):
             local_contacts.append('admin')
         records = OE.res_users.search_read(fields=['id'], domain=[('login','in',local_contacts)])
         #local_contact_ids = [d['id'] for d in local_contacts]
-        values.local_contact_ids = [(6, 0, [lc['id'] for lc in records])]
+        values.local_contact_ids = [lc['id'] for lc in records]
     partner_xmlid = values.pop('partner_xmlid', None)
     #partner_xmlid = values.get('partner_xmlid', None)
     if partner_xmlid is not None:
@@ -92,6 +94,9 @@ def update_order(values):
         else:
             values.state = 'appt'
     #if values.state: order['state'] == values.state
+    login = values.pop('user')
+    records = OE.res_users.search_read(fields=['id'], domain=[('login','=',login)])
+    values.real_id = records[0]['id']
     if not order:
         OE.fnx_shipping.create(dict(values))
     else:

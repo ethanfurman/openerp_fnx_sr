@@ -43,11 +43,19 @@ class fnx_sr_appointment(osv.Model):
 fnx_sr_appointment()
 """
 
+DIRECTION = {
+    'incoming' : 'purchase',
+    'outgoing' : 'sale',
+    }
+
+
 class fnx_sr_shipping(osv.Model):
     _name = 'fnx.sr.shipping'
-    _description = 'shipping & receiving entries'
+    _description = 'shipping & receiving'
+    _inherit = ['mail.thread']
     _order = 'appointment_date desc, appointment_time asc'
     _rec_name = 'name'
+    _mail_flat_thread = False
 
     def _document_name_get(self, cr, uid, ids, _field, _arg, context=None):
         result = {}
@@ -134,12 +142,45 @@ class fnx_sr_shipping(osv.Model):
 
 
     def create(self, cr, uid, values, context=None):
+        if context == None:
+            context = {}
+        context['mail_create_nolog'] = True
+        context['mail_create_nosubscribe'] = True
         values['state'] = 'draft'
-        return super(fnx_sr_shipping, self).create(cr, uid, values, context=context)
+        res_users = self.pool.get('res.users')
+        real_id = values.pop('real_id', None)
+        real_name = None
+        direction = DIRECTION[values['direction']].title()
+        body = '%s order created' % direction
+        follower_ids = values.pop('local_contact_ids', [])
+        if real_id:
+            follower_ids.append(real_id)
+            real_name = res_users.browse(cr, uid, real_id, context=context).partner_id.name
+            body = '%s order received from %s' % (direction, real_name)
+        new_id = super(fnx_sr_shipping, self).create(cr, uid, values, context=context)
+        self.message_post(cr, uid, new_id, body=body, context=context)
+        if follower_ids:
+            self.message_subscribe_users(cr, uid, [new_id], user_ids=follower_ids, context=context)
+        return new_id
+
+    def write(self, cr, uid, id, values, context=None):
+        if context is None:
+            context = {}
+        state = None
+        if not context.pop('from_workflow', False):
+            state = values.pop('state', None)
+        result = super(fnx_sr_shipping, self).write(cr, uid, id, values, context=context)
+        if 'appointment_time' in values:
+            self.sr_schedule(cr, uid, id, context=context)
+        if state is not None:
+            wf = self.WORKFLOW[state]
+            wf(self, cr, uid, id, context=context)
+        return result
 
     def sr_draft(self, cr, uid, ids, context=None):
         if context is None:
             context = {}
+        context['from_workflow'] = True
         override = context.get('manager_override')
         values = {'state':'draft'}
         if override:
@@ -149,32 +190,44 @@ class fnx_sr_shipping(osv.Model):
             values['appt_scheduled_by_id'] = False
             values['check_in'] = False
             values['check_out'] = False
-        self.write(cr, uid, ids, {'state':'draft'}, context=context)
+        if self.write(cr, uid, ids, {'state':'draft'}, context=context):
+            if override:
+                context['mail_create_nosubscribe'] = True
+                self.message_post(cr, uid, ids, body="Reset to draft", context=context)
+            return True
+        return False
 
     def sr_schedule(self, cr, uid, ids, context=None):
         if context is None:
             context = {}
+        context['from_workflow'] = True
         override = context.get('manager_override')
         current = self.browse(cr, uid, ids, context=context)[0]
         if current.appointment_date and current.appointment_time:
             values = {
                     'state': 'scheduled',
-                    'appt_scheduled_by_id': current.appt_scheduled_by_id or uid,
+                    'appt_scheduled_by_id': current.appt_scheduled_by_id.id or uid,
                     'appt_confirmed': True,
                     'appt_confirmed_on': current.appt_confirmed_on or DateTime.now(),
                     }
+            body = 'Scheduled for %s %s' % (current.appointment_date, current.appointment_time)
             if override:
                 values['check_in'] = False
                 values['check_out'] = False
-            self.write(cr, uid, ids, values, context=context)
-            return True
+                body = 'Reset to scheduled.'
+            if self.write(cr, uid, ids, values, context=context):
+                context['mail_create_nosubscribe'] = True
+                self.message_post(cr, uid, ids, body=body, context=context)
+                return True
         return False
 
     def sr_appointment(self, cr, uid, ids, context=None):
         if context is None:
             context = {}
+        context['from_workflow'] = True
         override = context.get('manager_override')
         values = {'state':'appt'}
+        body = 'Order pulled.'
         if override:
             values['appointment_time'] = 0.0
             values['appt_confirmed'] = False
@@ -182,50 +235,93 @@ class fnx_sr_shipping(osv.Model):
             values['appt_scheduled_by_id'] = False
             values['check_in'] = False
             values['check_out'] = False
-        self.write(cr, uid, ids, values, context=context)
+            body = 'Appointment cancelled.'
+        if self.write(cr, uid, ids, values, context=context):
+            context['mail_create_nosubscribe'] = True
+            self.message_post(cr, uid, ids, body=body, context=context)
+            return True
+        return False
 
     def sr_ready(self, cr, uid, ids, context=None):
         if context is None:
             context = {}
+        context['from_workflow'] = True
         override = context.get('manager_override')
         values = {'state':'ready'}
+        body = 'Order pulled.'
+        current = self.browse(cr, uid, ids, context=context)[0]
+        if not (current.appointment_date and current.appointment_time):
+            return False
         if override:
             values['check_in'] = False
             values['check_out'] = False
-        self.write(cr, uid, ids, values, context=context)
-        return True
+            body = 'Reset to Ready.'
+        if self.write(cr, uid, ids, values, context=context):
+            context['mail_create_nosubscribe'] = True
+            self.message_post(cr, uid, ids, body=body, context=context)
+            return True
+        return False
 
     def sr_checkin(self, cr, uid, ids, context=None):
         if context is None:
             context = {}
+        context['from_workflow'] = True
         override = context.get('manager_override')
         values = {
                 'state':'checked_in',
                 'check_in': DateTime.now(),
                 }
+        body = 'Driver checked in at %s' % values['check_in']
         if override:
             values['check_out'] = False
-        self.write(cr, uid, ids, values, context=context)
-        return True
+            body = 'Reset to Driver checked in.'
+        if self.write(cr, uid, ids, values, context=context):
+            context['mail_create_nosubscribe'] = True
+            self.message_post(cr, uid, ids, body=body, context=context)
+            return True
+        return False
 
     def sr_complete(self, cr, uid, ids, context=None):
         if context is None:
             context = {}
+        context['from_workflow'] = True
         override = context.get('manager_override')
         values = {
                 'state':'complete',
                 'check_out': DateTime.now(),
                 }
+        body = 'Driver checked out at %s' % values['check_out']
         if override:
             current = self.browse(cr, uid, ids, context=context)[0]
-            values['check_out'] = current.check_out
-        self.write(cr, uid, ids, values, context=context)
-        return True
+            values['check_out'] = current.check_out or values['check_out']
+            body = 'Reset to Complete.'
+        if self.write(cr, uid, ids, values, context=context):
+            context['mail_create_nosubscribe'] = True
+            followers = self._get_followers(cr, uid, ids, None, None, context=context)[ids[0]]['message_follower_ids']
+            self.message_post(cr, uid, ids, body=body, context=context)
+            #self.message_post(cr, uid, ids, body='Order complete.', subject='%s' % current.name, partner_ids=(6, 0, followers), context=context)
+            return True
+        return False
 
     def sr_cancel(self, cr, uid, ids, context=None):
-        self.write(cr, uid, ids, {'state':'cancelled'}, context=context)
-        return True
+        if context is None:
+            context = {}
+        context['from_workflow'] = True
+        if self.write(cr, uid, ids, {'state':'cancelled'}, context=context):
+            context['mail_create_nosubscribe'] = True
+            self.message_post(cr, uid, ids, body='Order cancelled.', context=context)
+            return True
+        return False
 
+    WORKFLOW = {
+        'draft': sr_draft,
+        'scheduled': sr_schedule,
+        'appt': sr_appointment,
+        'ready': sr_ready,
+        'checked_in': sr_checkin,
+        'complete': sr_complete,
+        'cancelled': sr_cancel,
+        }
 fnx_sr_shipping()
 
 # shipment status --> Draft, Scheduled (confirmed with carrier), Completed
