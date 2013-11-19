@@ -12,36 +12,6 @@ import openerp.addons.decimal_precision as dp
 
 _logger = logging.getLogger(__name__)
 
-"""
-class fnx_sr_bay(osv.Model):
-    _name = 'fnx.sr.bays'
-    _description = 'Loading Bays'
-    _columns = {
-        'name' : fields.char('Unique name', size=64),
-        'location' : fields.char('Location', size=128),
-        'description': fields.text('Description'),
-        }
-    _sql_constraints = [
-        ('name_uniq', 'unique(name)', 'name must be unique!'),
-        ]
-fnx_sr_bay()
-
-class fnx_sr_appointment(osv.Model):
-
-    def _calc_time(self, cr, uid, ids, field_name, arg, context=None):
-        pass
-
-    def _check_overlap(self, cr, uid, ids, context=None):
-        pass
-
-    _name = 'fnx.sr.appointment'
-    _description = 'Appointments for delivery / pickup'
-    _columns = {
-        #'departure': fields.function(_calc_time, type='datetime', string='Vehicle Departure Time')
-        'loading_bay': fields.many2one('fnx.sr.bays', 'Loading Bay'),
-        }
-fnx_sr_appointment()
-"""
 
 DIRECTION = {
     'incoming' : 'purchase',
@@ -98,7 +68,7 @@ class fnx_sr_shipping(osv.Model):
 
         'name': fields.function(_document_name_get, type='char', string='Document', store=True),
         'direction': fields.selection([('incoming', 'Receiving'), ('outgoing', 'Shipping')], "Type of shipment", required=True),
-        'local_contact_ids': fields.many2many('res.users', 'users_shipping_rel', 'user_id', 'ship_id', string='Local employee', ondelete='restrict'),
+        'local_contact_id': fields.one2many('res.users', 'user_id', string='Local employee', ondelete='restrict'),
         'job_title': fields.selection([('sales', 'Sales Rep:'), ('purchasing', 'Purchaser:')], 'Job Title'),
         'preposition': fields.selection([('sales', 'to '), ('purchasing', 'from ')], 'Type of order'),
         'local_source_document': fields.char('Our document', size=32),
@@ -154,9 +124,10 @@ class fnx_sr_shipping(osv.Model):
         body = '%s order created' % direction
         follower_ids = values.pop('local_contact_ids', [])
         if real_id:
+            values['local_contact_id'] = [(6, 0, (real_id,))] #res_users.browse(cr, uid, real_id, context=context)
             follower_ids.append(real_id)
             real_name = res_users.browse(cr, uid, real_id, context=context).partner_id.name
-            body = '%s order received from %s' % (direction, real_name)
+            body = 'Order received from %s %s' % ({'Purchase':'Purchaser', 'Sale':'Sales Rep'}[direction], real_name)
         new_id = super(fnx_sr_shipping, self).create(cr, uid, values, context=context)
         self.message_post(cr, uid, new_id, body=body, context=context)
         if follower_ids:
@@ -267,9 +238,10 @@ class fnx_sr_shipping(osv.Model):
             context = {}
         context['from_workflow'] = True
         override = context.get('manager_override')
+        current = self.browse(cr, uid, ids, context=context)[0]
         values = {
                 'state':'checked_in',
-                'check_in': DateTime.now(),
+                'check_in': current.check_in or DateTime.now(),
                 }
         body = 'Driver checked in at %s' % values['check_in']
         if override:
@@ -291,15 +263,15 @@ class fnx_sr_shipping(osv.Model):
                 'check_out': DateTime.now(),
                 }
         body = 'Driver checked out at %s' % values['check_out']
+        current = self.browse(cr, uid, ids, context=context)[0]
         if override:
-            current = self.browse(cr, uid, ids, context=context)[0]
             values['check_out'] = current.check_out or values['check_out']
             body = 'Reset to Complete.'
         if self.write(cr, uid, ids, values, context=context):
             context['mail_create_nosubscribe'] = True
             followers = self._get_followers(cr, uid, ids, None, None, context=context)[ids[0]]['message_follower_ids']
             self.message_post(cr, uid, ids, body=body, context=context)
-            #self.message_post(cr, uid, ids, body='Order complete.', subject='%s' % current.name, partner_ids=(6, 0, followers), context=context)
+            self.message_post(cr, uid, ids, body='%s complete.' % current.name, subtype='mt_comment', partner_ids=followers, context=context)
             return True
         return False
 
