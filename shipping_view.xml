@@ -9,7 +9,7 @@
             <field name="name">fnx.sr.calendar</field>
             <field name="model">fnx.sr.shipping</field>
             <field name="arch" type="xml">
-                <calendar string="Calendar View" color="state" date_start="appointment_date">
+                <calendar string="Calendar View" color="state" date_start="appointment">
                     <field name="name"/>
                     <field name="partner_id"/>
                     <field name="partner_source_document"/>
@@ -24,12 +24,12 @@
             <field name="arch" type="xml">
                 <tree string="Tree View" toolbar="1" create="false">
                     <field name="direction"/>
-                    <field name="appointment_date"/>
-                    <field name="appointment_time" widget="float_time"/>
+                    <field name="appointment"/>
                     <field name="name"/>
                     <field name="partner_id"/>
                     <field name="partner_source_document"/>
                     <field name="state"/>
+                    <field name="appt_confirmed_on"/>
                 </tree>
             </field>
         </record>

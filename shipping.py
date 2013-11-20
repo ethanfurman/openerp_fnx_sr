@@ -4,11 +4,13 @@ from itertools import groupby
 from openerp import netsvc
 from openerp import tools
 from openerp.osv import fields, osv
-from openerp.tools import float_compare, DEFAULT_SERVER_DATETIME_FORMAT
+from openerp.tools import float_compare, DEFAULT_SERVER_DATETIME_FORMAT, detect_server_timezone
 from openerp.tools.translate import _
 from fnx import Date, DateTime, Time, float
+from pytz import timezone
 import logging
 import openerp.addons.decimal_precision as dp
+import time
 
 _logger = logging.getLogger(__name__)
 
@@ -18,6 +20,7 @@ DIRECTION = {
     'outgoing' : 'sale',
     }
 
+utc = timezone('UTC')
 
 class fnx_sr_shipping(osv.Model):
     _name = 'fnx.sr.shipping'
@@ -33,9 +36,27 @@ class fnx_sr_shipping(osv.Model):
             result[record.id] = {'incoming':'PO ', 'outgoing':'Inv '}[record.direction] + record.local_source_document
         return result
 
-    def _calc_duration(self, cr, uid, ids, field, _arg, context=None):
-        if not ids:
-            return {}
+    def _calc_appointment(self, cr, uid, ids, _field=None, _arg=None, context=None):
+        if context is None:
+            context = {}
+        result = {}
+        user_tz = context.get('tz')
+        if user_tz:
+            user_tz = timezone(user_tz)
+        for id in ids:
+            result[id] = False
+            record = self.browse(cr, uid, id, context=context)
+            date = record.appointment_date
+            time = record.appointment_time or 0.0
+            if date:
+                if not user_tz:
+                    continue
+                dt = DateTime.combine(Date(date), Time.fromfloat(time)).datetime()
+                dt = user_tz.localize(dt).astimezone(utc)
+                result[id] = dt
+        return result
+
+    def _calc_duration(self, cr, uid, ids, _field=None, _arg=None, context=None):
         result = {}
         for id in ids:
             record = self.browse(cr, uid, id, context=context)
@@ -99,7 +120,10 @@ class fnx_sr_shipping(osv.Model):
         'carrier_id': fields.many2one('res.partner', 'Shipper', domain=[('is_carrier','=',True)]),
         'appointment_date': fields.date('Appointment date', help="Date when driver should arrive."),
         'appointment_time': fields.float('Appointment time', help="Time when driver should arrive."),
-        'duration': fields.function(_calc_duration, type='float', string='Duration (in hours)'),
+        'appointment': fields.function(_calc_appointment, type='datetime', string='Appointment',
+                store={'fnx.sr.shipping': (_calc_appointment, ['appointment_date', 'appointment_time'], 10)}),
+        'duration': fields.function(_calc_duration, type='float', string='Duration (in hours)',
+                store={'fnx.sr.shipping': (_calc_duration, ['check_in', 'check_out'], 10)}),
         'appt_scheduled_by_id': fields.many2one('res.users', 'Scheduled by', help="Falcon employee that scheduled appointment."),
         'appt_confirmed': fields.boolean('Appointment confirmed'),
         'appt_confirmed_on': fields.datetime('Confirmed on', help="When the appointment was confirmed with the carrier"),
@@ -133,15 +157,20 @@ class fnx_sr_shipping(osv.Model):
         return new_id
 
     def write(self, cr, uid, id, values, context=None):
+        print 'write'
         if context is None:
             context = {}
         state = None
         if not context.pop('from_workflow', False):
+            print '  0'
             state = values.pop('state', None)
+        print values
         result = super(fnx_sr_shipping, self).write(cr, uid, id, values, context=context)
         if 'appointment_time' in values:
+            print '  1'
             self.sr_schedule(cr, uid, id, context=context)
         if state is not None:
+            print '  2'
             wf = self.WORKFLOW[state]
             wf(self, cr, uid, id, context=context)
         return result
@@ -167,24 +196,29 @@ class fnx_sr_shipping(osv.Model):
         return False
 
     def sr_schedule(self, cr, uid, ids, context=None):
+        print 'sr_schedule'
         if context is None:
             context = {}
         context['from_workflow'] = True
         override = context.get('manager_override')
         current = self.browse(cr, uid, ids, context=context)[0]
         if current.appointment_date and current.appointment_time:
+            print '  0'
             values = {
                     'state': 'scheduled',
                     'appt_scheduled_by_id': current.appt_scheduled_by_id.id or uid,
                     'appt_confirmed': True,
-                    'appt_confirmed_on': current.appt_confirmed_on or DateTime.now(),
+                    'appt_confirmed_on': DateTime.now(),
                     }
-            body = 'Scheduled for %s %s' % (current.appointment_date, current.appointment_time)
+            body = 'Scheduled for %s' % (current.appointment, )
             if override:
+                print '  1'
                 values['check_in'] = False
                 values['check_out'] = False
+                values['appt_confirmed_on'] = current.appt_confirmed_on
                 body = 'Reset to scheduled.'
             if self.write(cr, uid, ids, values, context=context):
+                print '  2'
                 context['mail_create_nosubscribe'] = True
                 self.message_post(cr, uid, ids, body=body, context=context)
                 return True

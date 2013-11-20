@@ -19,9 +19,8 @@
     'data': [
             'security/security.xml',
             'security/ir.model.access.csv',
-            'ship_receive_view.xml',
+            'shipping_view.xml',
             'res_partner_view.xml',
-            #'ship_receive_workflow.xml',
         ],
     'test': [],
     'installable': True,

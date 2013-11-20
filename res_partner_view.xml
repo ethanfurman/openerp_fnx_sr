@@ -12,8 +12,7 @@
                             <field name="shipped" nolabel="1">
                                 <tree>
                                     <field name="name"/>
-                                    <field name="appointment_date"/>
-                                    <field name="appointment_time"/>
+                                    <field name="appointment"/>
                                     <field name="partner_source_document"/>
                                     <field name="state"/>
                                 </tree>

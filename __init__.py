@@ -1,2 +1,2 @@
-import ship_receive
+import shipping
 import res_partner
