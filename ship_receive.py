@@ -68,7 +68,7 @@ class fnx_sr_shipping(osv.Model):
 
         'name': fields.function(_document_name_get, type='char', string='Document', store=True),
         'direction': fields.selection([('incoming', 'Receiving'), ('outgoing', 'Shipping')], "Type of shipment", required=True),
-        'local_contact_id': fields.one2many('res.users', 'user_id', string='Local employee', ondelete='restrict'),
+        'local_contact_id': fields.many2one('res.users', string='Local employee', ondelete='restrict'),
         'job_title': fields.selection([('sales', 'Sales Rep:'), ('purchasing', 'Purchaser:')], 'Job Title'),
         'preposition': fields.selection([('sales', 'to '), ('purchasing', 'from ')], 'Type of order'),
         'local_source_document': fields.char('Our document', size=32),
@@ -95,7 +95,6 @@ class fnx_sr_shipping(osv.Model):
                  "Complete  --> Order has been shipped.\n",
             ),
         'comment': fields.text('Comments', help="Comment or instructions for this order only."),
-        #'warehouse_comment': fields.text('Warehouse comment', help="Comment from FIS."),
 
         'carrier_id': fields.many2one('res.partner', 'Shipper', domain=[('is_carrier','=',True)]),
         'appointment_date': fields.date('Appointment date', help="Date when driver should arrive."),
@@ -116,7 +115,6 @@ class fnx_sr_shipping(osv.Model):
             context = {}
         context['mail_create_nolog'] = True
         context['mail_create_nosubscribe'] = True
-        values['state'] = 'draft'
         res_users = self.pool.get('res.users')
         real_id = values.pop('real_id', None)
         real_name = None
@@ -124,7 +122,7 @@ class fnx_sr_shipping(osv.Model):
         body = '%s order created' % direction
         follower_ids = values.pop('local_contact_ids', [])
         if real_id:
-            values['local_contact_id'] = [(6, 0, (real_id,))] #res_users.browse(cr, uid, real_id, context=context)
+            values['local_contact_id'] = real_id #res_users.browse(cr, uid, real_id, context=context)
             follower_ids.append(real_id)
             real_name = res_users.browse(cr, uid, real_id, context=context).partner_id.name
             body = 'Order received from %s %s' % ({'Purchase':'Purchaser', 'Sale':'Sales Rep'}[direction], real_name)
@@ -258,19 +256,20 @@ class fnx_sr_shipping(osv.Model):
             context = {}
         context['from_workflow'] = True
         override = context.get('manager_override')
-        values = {
-                'state':'complete',
-                'check_out': DateTime.now(),
-                }
-        body = 'Driver checked out at %s' % values['check_out']
+        order_update = context.get('order_update')
+        values = {'state':'complete'}
+        if not order_update:
+            values['check_out'] = DateTime.now()
+            body = 'Driver checked out at %s' % values['check_out']
         current = self.browse(cr, uid, ids, context=context)[0]
         if override:
-            values['check_out'] = current.check_out or values['check_out']
+            values['check_out'] = current.check_out or False
             body = 'Reset to Complete.'
         if self.write(cr, uid, ids, values, context=context):
             context['mail_create_nosubscribe'] = True
             followers = self._get_followers(cr, uid, ids, None, None, context=context)[ids[0]]['message_follower_ids']
-            self.message_post(cr, uid, ids, body=body, context=context)
+            if not order_update:
+                self.message_post(cr, uid, ids, body=body, context=context)
             self.message_post(cr, uid, ids, body='%s complete.' % current.name, subtype='mt_comment', partner_ids=followers, context=context)
             return True
         return False
