@@ -59,7 +59,7 @@
                                         <p>
                                             Order placed by
                                             <field name="job_title" class="oe_inline" attrs="{'readonly':True}"/>
-                                            <field name="local_contact_id" class="oe_inline" attrs="{'readonly':True}"/>
+                                            <field name="local_contact_id" class="oe_inline" attrs="{'readonly':[('is_manager','=',False)]}"/>
                                         </p>
                                     </h3>
                                 </div>

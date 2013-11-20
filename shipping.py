@@ -6,7 +6,7 @@ from openerp import tools
 from openerp.osv import fields, osv
 from openerp.tools import float_compare, DEFAULT_SERVER_DATETIME_FORMAT, detect_server_timezone
 from openerp.tools.translate import _
-from fnx import Date, DateTime, Time, float
+from fnx import Date, DateTime, Time, float, get_user_timezone
 from pytz import timezone
 import logging
 import openerp.addons.decimal_precision as dp
@@ -40,7 +40,7 @@ class fnx_sr_shipping(osv.Model):
         if context is None:
             context = {}
         result = {}
-        user_tz = context.get('tz')
+        user_tz = get_user_timezone(self, cr, uid)[uid]
         if user_tz:
             user_tz = timezone(user_tz)
         for id in ids:
@@ -157,20 +157,15 @@ class fnx_sr_shipping(osv.Model):
         return new_id
 
     def write(self, cr, uid, id, values, context=None):
-        print 'write'
         if context is None:
             context = {}
         state = None
         if not context.pop('from_workflow', False):
-            print '  0'
             state = values.pop('state', None)
-        print values
         result = super(fnx_sr_shipping, self).write(cr, uid, id, values, context=context)
         if 'appointment_time' in values:
-            print '  1'
             self.sr_schedule(cr, uid, id, context=context)
         if state is not None:
-            print '  2'
             wf = self.WORKFLOW[state]
             wf(self, cr, uid, id, context=context)
         return result
@@ -196,29 +191,32 @@ class fnx_sr_shipping(osv.Model):
         return False
 
     def sr_schedule(self, cr, uid, ids, context=None):
-        print 'sr_schedule'
         if context is None:
             context = {}
         context['from_workflow'] = True
+        user_tz = get_user_timezone(self, cr, uid)[uid]
         override = context.get('manager_override')
         current = self.browse(cr, uid, ids, context=context)[0]
         if current.appointment_date and current.appointment_time:
-            print '  0'
             values = {
-                    'state': 'scheduled',
-                    'appt_scheduled_by_id': current.appt_scheduled_by_id.id or uid,
+                    'appt_scheduled_by_id': uid,
                     'appt_confirmed': True,
                     'appt_confirmed_on': DateTime.now(),
                     }
-            body = 'Scheduled for %s' % (current.appointment, )
+            if current.state == 'draft':
+                values['state'] = scheduled
+            elif current.state == 'appt':
+                values['state'] = 'ready'
+            dt = utc.localize(DateTime(current.appointment).datetime())
+            if user_tz:
+                dt = dt.astimezone(timezone(user_tz))
+            body = 'Scheduled for %s' % (dt.strftime('%Y-%m-%d %H:%M %Z'), )
             if override:
-                print '  1'
                 values['check_in'] = False
                 values['check_out'] = False
                 values['appt_confirmed_on'] = current.appt_confirmed_on
                 body = 'Reset to scheduled.'
             if self.write(cr, uid, ids, values, context=context):
-                print '  2'
                 context['mail_create_nosubscribe'] = True
                 self.message_post(cr, uid, ids, body=body, context=context)
                 return True
