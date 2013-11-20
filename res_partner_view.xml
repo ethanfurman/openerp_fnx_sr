@@ -8,7 +8,7 @@
                 <field eval="18" name="priority"/>
                 <field name="arch" type="xml">
                     <page name="page_history" position="before">
-                        <page string="Shipped Orders">
+                        <page string="Shipments">
                             <field name="shipped" nolabel="1">
                                 <tree>
                                     <field name="name"/>

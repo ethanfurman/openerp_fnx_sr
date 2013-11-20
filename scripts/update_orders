@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-from os import stat
-from pwd import getpwuid
 from scription import Script, Run, log_exception, mail
 from VSS import Date
 from VSS.path import Path, listdir, glob
@@ -39,14 +37,11 @@ def archive(src_file, dest=ARCHIVE):
 def get_order(order):
     g = {}
     execfile(order, g)
-    result = PropertyDict(g['order'])
-    #result.user = getpwuid(stat(order).st_uid).pw_name
-    return result
+    return PropertyDict(g['order'])
 
 def update_order(values):
     print values
     local_contacts = values.pop('local_contact', None)
-    #local_contacts = values.get('local_contact', None)
     if local_contacts is not None:
         if 'sysadmin' in local_contacts:
             local_contacts.append('admin')
@@ -54,7 +49,6 @@ def update_order(values):
         #local_contact_ids = [d['id'] for d in local_contacts]
         values.local_contact_ids = [lc['id'] for lc in records]
     partner_xmlid = values.pop('partner_xmlid', None)
-    #partner_xmlid = values.get('partner_xmlid', None)
     if partner_xmlid is not None:
         records = OE.res_partner.search_read(fields=['id', 'module', 'xml_id'], domain=[('module','=',module[values.direction]),('xml_id','=',partner_xmlid)])
         if not records:
@@ -62,7 +56,6 @@ def update_order(values):
         partner_id = records[0]['id']
         values.partner_id = partner_id
     carrier_xmlid = values.pop('carrier_xmlid', None)
-    #carrier_xmlid = values.get('carrier_xmlid', None)
     print repr(carrier_xmlid)
     if carrier_xmlid not in ('99', None):
         print 'looking for carrier', carrier_xmlid
@@ -86,7 +79,9 @@ def update_order(values):
     order = None
     for order in orders:
         break
-    if not order:
+    if not order and not direction:
+        return
+    elif not order:
         values.state = 'draft'
     elif 'pallets' in values and values.pallets:
         if order['state'] in ('checked_in', 'complete', 'cancelled'):
@@ -95,11 +90,10 @@ def update_order(values):
             values.state = 'ready'
         else:
             values.state = 'appt'
-    #if values.state: order['state'] == values.state
     login = values.pop('user', None)
-    if login is not None:
+    if login:
         records = OE.res_users.search_read(fields=['id'], domain=[('login','=',login)])
-        values.user_id = records[0]['id']
+        values.real_id = records[0]['id']
     if not order:
         OE.fnx_shipping.create(dict(values))
     else:
@@ -117,28 +111,27 @@ def main(file_to_process='', hostname='localhost', db=DB, user=USER, password=PW
         files = [file_to_process]
     else:
         files = [SOURCE/f for f in SOURCE.listdir() if f != 'order_template']
-    #
-    print files
-    #
     OE.conn = conn = openerplib.get_connection(hostname='localhost', database=db, login=user, password=password)
     OE.res_partner = conn.get_model('res.partner')
     OE.res_users = conn.get_model('res.users')
     OE.fnx_shipping = conn.get_model('fnx.sr.shipping')
-    #
+ 
     retry = []
     failed = []
-    for group in ((files, retry), (retry, failed)):
+    #for group in ((files, retry), (retry, failed)):
+    for group in ((files, failed), ):
         time.sleep(5)
         trying, failing = group
         for file in trying:
             try:
                 order = get_order(file)
-                #import pdb; pdb.set_trace()
-                update_order(order)
-                archive(file)
+                if order.get('carrier_xmlid', None) != '01':
+                    update_order(order)
             except Exception:
                 log_exception()
                 failing.append(file)
+            finally:
+                archive(file)
     if failed:
         raise Exception("Unable to process orders: %r" % ', '.join(failed))
 
