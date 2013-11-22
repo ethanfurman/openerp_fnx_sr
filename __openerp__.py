@@ -15,7 +15,7 @@
             'fnx',
         ],
     'js': [
-            'static/src/js/refresh.js',
+            #'static/src/js/refresh.js',
         ],
     'data': [
             'security/security.xml',
