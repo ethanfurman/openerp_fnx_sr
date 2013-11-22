@@ -204,7 +204,7 @@ class fnx_sr_shipping(osv.Model):
                     'appt_confirmed_on': DateTime.now(),
                     }
             if current.state == 'draft':
-                values['state'] = scheduled
+                values['state'] = 'scheduled'
             elif current.state == 'appt':
                 values['state'] = 'ready'
             dt = utc.localize(DateTime(current.appointment).datetime())
