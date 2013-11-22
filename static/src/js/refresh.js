@@ -13,8 +13,8 @@ function addLoadEvent(func) {
     }
 }
 
-function AutoRefresh(seconds) {
-    setTimeout("location.reload(true);", seconds);
+function AutoRefresh() {
+    setTimeout("location.reload(true);", 60000);
 }
 
-addLoadEvent(AutoRefresh(10));
+addLoadEvent(AutoRefresh);
