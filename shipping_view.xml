@@ -24,12 +24,13 @@
             <field name="arch" type="xml">
                 <tree string="Tree View" toolbar="1" create="false">
                     <field name="direction"/>
+                    <field name="carrier_id"/>
                     <field name="appointment"/>
+                    <field name="pallets"/>
                     <field name="name"/>
                     <field name="partner_id"/>
                     <field name="partner_source_document"/>
                     <field name="state"/>
-                    <field name="appt_confirmed_on"/>
                 </tree>
             </field>
         </record>
