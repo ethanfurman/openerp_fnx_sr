@@ -81,8 +81,7 @@ class fnx_sr_shipping(osv.Model):
         res_partner = self.pool.get('res.partner')
         for id in ids:
             record = self.browse(cr, uid, id, context=context)
-            partner = res_partner.browse(cr, uid, record.partner_id)
-            result[id] = partner.warehouse_comment
+            result[id] = record.partner_id.warehouse_comment
         return result
 
     _columns = {
