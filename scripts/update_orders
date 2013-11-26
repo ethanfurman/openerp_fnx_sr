@@ -60,7 +60,7 @@ def update_order(values):
         partner_id = records[0]['id']
         values.partner_id = partner_id
     carrier_xmlid = values.pop('carrier_xmlid', None)
-    if carrier_xmlid not in ('99', None):
+    if carrier_xmlid not in (None, ):
         records = OE.res_partner.search_read(fields=['id'], domain=[('module','=',module['carrier']),('xml_id','=',carrier_xmlid)])
         if not records:
             raise ValueError('unable to find carrier %r' % carrier_xmlid)
@@ -97,9 +97,15 @@ def update_order(values):
         if login:
             records = OE.res_users.search_read(fields=['id'], domain=[('login','=',login)])
             values.real_id = records[0]['id']
-        OE.fnx_shipping.create(dict(values))
+        try:
+            OE.fnx_shipping.create(dict(values))
+        except Exception, exc:
+            log_exception(exc.faultCode)
     else:
-        OE.fnx_shipping.write([order['id']], dict(values))
+        try:
+            OE.fnx_shipping.write([order['id']], dict(values))
+        except Exception, exc:
+            log_exception(exc.faultCode)
 
 @Script(
         file_to_process=('order to add/update in system', ),
