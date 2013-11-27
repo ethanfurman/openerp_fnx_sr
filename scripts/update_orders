@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from scription import Script, Run, log_exception, mail
+from syslog import syslog
 from VSS import Date
 from VSS.path import Path, listdir, glob
 from VSS.utils import PropertyDict
@@ -135,8 +136,8 @@ def main(file_to_process='', hostname='localhost', db=DB, user=USER, password=PW
                 if order.get('carrier_xmlid', None) != '01':
                     update_order(order)
                 dest = ARCHIVE
-            except BadFormat:
-                log_exception()
+            except BadFormat, exc:
+                syslog(exc.message)
                 failing.append(file)
                 dest = ERRORS
             except Exception:
