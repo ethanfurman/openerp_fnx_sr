@@ -108,6 +108,11 @@ def update_order(values):
         except Exception, exc:
             log_exception(exc.faultCode)
 
+def get_files(source=SOURCE):
+    files = [SOURCE/f for f in SOURCE.listdir() if f != 'order_template']
+    files.sort(key=lambda f: f.stat().st_mtime)
+    return files
+
 @Script(
         file_to_process=('order to add/update in system', ),
         hostname=('host where OpenERP instance is running', ),
@@ -119,7 +124,7 @@ def main(file_to_process='', hostname='localhost', db=DB, user=USER, password=PW
     if file_to_process:
         files = [file_to_process]
     else:
-        files = [SOURCE/f for f in SOURCE.listdir() if f != 'order_template']
+        files = get_files()
     OE.conn = conn = openerplib.get_connection(hostname='localhost', database=db, login=user, password=password)
     OE.res_partner = conn.get_model('res.partner')
     OE.res_users = conn.get_model('res.users')
