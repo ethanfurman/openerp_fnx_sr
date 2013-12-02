@@ -74,6 +74,18 @@ class fnx_sr_shipping(osv.Model):
             result[id] = res_users.has_group(cr, uid, 'fnx_sr.group_fnx_sr_manager')
         return result
 
+    def _generate_order_by(self, order_spec, query):
+        "correctly orders state field if state is in query"
+        order_by = super(fnx_sr_shipping, self)._generate_order_by(order_spec, query)
+        if order_spec and 'state ' in order_spec:
+            state_column = self._columns['state']
+            state_order = 'CASE '
+            for i, state in enumerate(state_column.selection):
+                state_order += "WHEN %s.state='%s' THEN %i " % (self._table, state[0], i)
+            state_order += 'END '
+            order_by = order_by.replace('"%s"."state" ' % self._table, state_order)
+        return order_by
+
     def _res_partner_warehouse_comment(self, cr, uid, ids, field, _arg, context=None):
         if not ids:
             return {}
