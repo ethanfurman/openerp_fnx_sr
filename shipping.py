@@ -214,7 +214,9 @@ class fnx_sr_shipping(osv.Model):
                     'appt_confirmed': True,
                     'appt_confirmed_on': DateTime.now(),
                     }
-            if current.state == 'draft':
+            if override:
+                values['state'] = 'scheduled'
+            elif current.state == 'draft':
                 values['state'] = 'scheduled'
             elif current.state == 'appt':
                 values['state'] = 'ready'
