@@ -116,12 +116,52 @@
             </field>
         </record>
 
+        <record model="ir.ui.view" id="search_fnx_sr">
+            <field name="name">Shipping &amp; Receiving Search</field>
+            <field name="model">fnx.sr.shipping</field>
+            <field name="arch" type="xml">
+                <search string="Search Shipping &amp; Receiving">
+                    <field name="state" string="Status" filter_domain="[('state','in',['draft','appt','ready','checked_in'])]"/>
+                    <separator/>
+                    <filter string="Order Placed" domain="[('state','=','draft')]"/>
+                    <filter string="Ready, Needs Appt" domain="[('state','=','appt')]"/>
+                    <filter string="Ready" domain="[('state','=','ready')]"/>
+                    <filter string="Driver checked-in" domain="[('state','=','checked_in')]"/>
+                    <separator/>
+                    <group expand="0" string="Group by...">
+                        <filter string="Carrier" domain="[]" context="{'group_by': 'carrier_id'}"/>
+                        <filter string="Customer/Vendor" domain="[]" context="{'group_by': 'partner_id'}"/>
+                    </group>
+                </search>
+            </field>
+        </record>
+
         <record model="ir.actions.act_window" id="action_fnx_sr_form">
             <field name="name">Shipping &amp; Receiving</field>
             <field name="res_model">fnx.sr.shipping</field>
             <field name="view_type">form</field>
             <field name="view_id" ref="fnx_sr_tree"/>
             <field name="view_mode">tree,form,calendar</field>
+            <!-- <field name="search_view_id" ref="..."/> -->
+        </record>
+
+        <record model="ir.actions.act_window" id="action_fnx_sr_form_open_orders">
+            <field name="name">Shipping &amp; Receiving</field>
+            <field name="res_model">fnx.sr.shipping</field>
+            <field name="view_type">form</field>
+            <field name="view_id" ref="fnx_sr_tree"/>
+            <field name="view_mode">tree,form,calendar</field>
+            <field name="domain" eval="[('state','in',['draft','appt','ready','checked_in'])]"/>
+            <!-- <field name="search_view_id" ref="..."/> -->
+        </record>
+
+        <record model="ir.actions.act_window" id="action_fnx_sr_form_closed_orders">
+            <field name="name">Shipping &amp; Receiving</field>
+            <field name="res_model">fnx.sr.shipping</field>
+            <field name="view_type">form</field>
+            <field name="view_id" ref="fnx_sr_tree"/>
+            <field name="view_mode">tree,form,calendar</field>
+            <field name="domain" eval="[('state','in',['cancelled','complete'])]"/>
             <!-- <field name="search_view_id" ref="..."/> -->
         </record>
 
@@ -133,11 +173,19 @@
             />
 
         <menuitem
-            name="Schedule"
-            id="menu_item_fnx_sr_schedule"
+            name="Open Orders"
+            id="menu_item_fnx_sr_schedule_open"
             parent="menu_fnx_sr_shipping"
-            sequence="10"
-            action="action_fnx_sr_form"
+            sequence="20"
+            action="action_fnx_sr_form_open_orders"
+            />
+
+        <menuitem
+            name="Closed Orders"
+            id="menu_item_fnx_sr_schedule_closed"
+            parent="menu_fnx_sr_shipping"
+            sequence="30"
+            action="action_fnx_sr_form_closed_orders"
             />
 
     </data>
