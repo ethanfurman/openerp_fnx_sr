@@ -26,7 +26,7 @@ class fnx_sr_shipping(osv.Model):
     _name = 'fnx.sr.shipping'
     _description = 'shipping & receiving'
     _inherit = ['mail.thread']
-    _order = 'appointment_date desc, appointment_time asc'
+    _order = 'state desc, appointment_date desc, appointment_time asc'
     _rec_name = 'name'
     _mail_flat_thread = False
 
@@ -52,7 +52,7 @@ class fnx_sr_shipping(osv.Model):
                 if not user_tz:
                     continue
                 dt = DateTime.combine(Date(date), Time.fromfloat(time)).datetime()
-                dt = user_tz.localize(dt).astimezone(utc)
+                dt = user_tz.localize(dt)
                 result[id] = dt
         return result
 
