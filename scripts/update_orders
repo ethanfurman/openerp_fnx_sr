@@ -19,7 +19,7 @@ execfile(USER_PW_DB)
 OE = PropertyDict()
 
 module = {
-    'incoming': 'F65',
+    'incoming': 'F163',
     'outgoing': 'F33',
     'carrier':  'F27',
     }
@@ -27,11 +27,15 @@ module = {
 class BadFormat(Exception):
     "order is incomplete"
 
+class MissingPartner(Exception):
+    "unable to find partner"
+
 def archive(src_file, dest=ARCHIVE):
     src_file = Path(src_file)
-    existing = glob(dest/src_file.filename+'*')
+    basename = src_file.filename.split('_')[0]
+    existing = glob(dest/basename+'*')
     if not existing:
-        dst_file = dest/src_file.filename + '_01'
+        dst_file = dest/basename + '_01'
     else:
         existing.sort()
         dst_file, count = existing[-1].split('_')
@@ -57,14 +61,14 @@ def update_order(values):
     if partner_xmlid is not None:
         records = OE.res_partner.search_read(fields=['id', 'module', 'xml_id'], domain=[('module','=',module[values.direction]),('xml_id','=',partner_xmlid)])
         if not records:
-            raise ValueError('unable to find partner %r' % partner_xmlid)
+            raise MissingPartner('unable to find partner %r' % partner_xmlid)
         partner_id = records[0]['id']
         values.partner_id = partner_id
     carrier_xmlid = values.pop('carrier_xmlid', None)
     if carrier_xmlid not in (None, ):
         records = OE.res_partner.search_read(fields=['id'], domain=[('module','=',module['carrier']),('xml_id','=',carrier_xmlid)])
         if not records:
-            raise ValueError('unable to find carrier %r' % carrier_xmlid)
+            raise MissingPartner('unable to find carrier %r' % carrier_xmlid)
         carrier_id = records[0]['id']
         values.carrier_id = carrier_id
     direction = values.get('direction')
@@ -141,7 +145,7 @@ def main(file_to_process='', hostname='localhost', db=DB, user=USER, password=PW
                 if order.get('carrier_xmlid', None) != '01':
                     update_order(order)
                 dest = ARCHIVE
-            except BadFormat, exc:
+            except (BadFormat, MissingPartner), exc:
                 syslog(exc.message)
                 failing.append(file)
                 dest = ERRORS
