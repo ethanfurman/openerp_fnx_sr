@@ -249,7 +249,7 @@
             name="All Orders"
             id="menu_item_fnx_sr_schedule_all"
             parent="menu_fnx_sr_shipping"
-            sequence="30"
+            sequence="40"
             action="action_fnx_sr_form_all_orders"
             />
 
