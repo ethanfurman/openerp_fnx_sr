@@ -68,7 +68,9 @@ def update_order(values):
     if carrier_xmlid not in (None, ):
         records = OE.res_partner.search_read(fields=['id'], domain=[('module','=',module['carrier']),('xml_id','=',carrier_xmlid)])
         if not records:
-            raise MissingPartner('unable to find carrier %r' % carrier_xmlid)
+            records = OE.res_partner.search_read(fields=['id'], domain=[('module','=',module['carrier']),('xml_id','=','99')])
+            if not records:
+                raise MissingPartner('unable to find carrier %r' % carrier_xmlid)
         carrier_id = records[0]['id']
         values.carrier_id = carrier_id
     direction = values.get('direction')
