@@ -26,7 +26,7 @@ class fnx_sr_shipping(osv.Model):
     _name = 'fnx.sr.shipping'
     _description = 'shipping & receiving'
     _inherit = ['mail.thread']
-    _order = 'state desc, appointment_date desc, appointment_time asc'
+    _order = 'appointment_date asc, appointment_time asc, state desc'
     _rec_name = 'name'
     _mail_flat_thread = False
 
