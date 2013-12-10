@@ -284,7 +284,7 @@ class fnx_sr_shipping(osv.Model):
         if len(ids) > 1:
             # check all have the same carrier
             records = self.browse(cr, uid, ids, context=context)
-            carrier_ids = [r.carrier_id for r in records]
+            carrier_ids = [r.carrier_id.id for r in records]
             if not all_equal(carrier_ids):
                 raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
         context['from_workflow'] = True
@@ -313,7 +313,7 @@ class fnx_sr_shipping(osv.Model):
         if len(ids) > 1:
             # check all have the same carrier
             records = self.browse(cr, uid, ids, context=context)
-            carrier_ids = [r.carrier_id for r in records]
+            carrier_ids = [r.carrier_id.id for r in records]
             if not all_equal(carrier_ids):
                 raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
         context['from_workflow'] = True
