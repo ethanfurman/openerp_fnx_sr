@@ -201,6 +201,7 @@
             <field name="view_mode">tree,form,calendar</field>
             <field name="domain" eval="[('state','in',['draft','scheduled','appt','ready','checked_in'])]"/>
             <field name="search_view_id" ref="search_fnx_sr_open_orders"/>
+            <field name="limit" eval="1000"/>
         </record>
 
         <record model="ir.actions.act_window" id="action_fnx_sr_form_closed_orders">
@@ -211,6 +212,7 @@
             <field name="view_mode">tree,form,calendar</field>
             <field name="domain" eval="[('state','in',['cancelled','complete'])]"/>
             <field name="search_view_id" ref="search_fnx_sr_closed_orders"/>
+            <field name="limit" eval="1000"/>
         </record>
 
         <record model="ir.actions.act_window" id="action_fnx_sr_form_all_orders">
@@ -220,6 +222,7 @@
             <field name="view_id" ref="fnx_sr_tree"/>
             <field name="view_mode">tree,form,calendar</field>
             <field name="search_view_id" ref="search_fnx_sr_all_orders"/>
+            <field name="limit" eval="1000"/>
         </record>
 
         <menuitem
