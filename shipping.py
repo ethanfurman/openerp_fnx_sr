@@ -6,7 +6,7 @@ from openerp import tools
 from openerp.osv import fields, osv
 from openerp.tools import float_compare, DEFAULT_SERVER_DATETIME_FORMAT, detect_server_timezone
 from openerp.tools.translate import _
-from fnx import Date, DateTime, Time, float, get_user_timezone
+from fnx import Date, DateTime, Time, float, get_user_timezone, all_equal
 from pytz import timezone
 import logging
 import openerp.addons.decimal_precision as dp
@@ -279,6 +279,14 @@ class fnx_sr_shipping(osv.Model):
     def sr_checkin(self, cr, uid, ids, context=None):
         if context is None:
             context = {}
+        if isinstance(ids, (int, long)):
+            ids = [ids]
+        if len(ids) > 1:
+            # check all have the same carrier
+            records = self.browse(cr, uid, ids, context=context)
+            carrier_ids = [r.carrier_id for r in records]
+            if not all_equal(carrier_ids):
+                raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
         context['from_workflow'] = True
         override = context.get('manager_override')
         current = self.browse(cr, uid, ids, context=context)[0]
@@ -292,13 +300,22 @@ class fnx_sr_shipping(osv.Model):
             body = 'Reset to Driver checked in.'
         if self.write(cr, uid, ids, values, context=context):
             context['mail_create_nosubscribe'] = True
-            self.message_post(cr, uid, ids, body=body, context=context)
+            for id in ids:
+                self.message_post(cr, uid, id, body=body, context=context)
             return True
         return False
 
     def sr_complete(self, cr, uid, ids, context=None):
         if context is None:
             context = {}
+        if isinstance(ids, (int, long)):
+            ids = [ids]
+        if len(ids) > 1:
+            # check all have the same carrier
+            records = self.browse(cr, uid, ids, context=context)
+            carrier_ids = [r.carrier_id for r in records]
+            if not all_equal(carrier_ids):
+                raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
         context['from_workflow'] = True
         override = context.get('manager_override')
         order_update = context.get('order_update')
@@ -314,8 +331,10 @@ class fnx_sr_shipping(osv.Model):
             context['mail_create_nosubscribe'] = True
             followers = self._get_followers(cr, uid, ids, None, None, context=context)[ids[0]]['message_follower_ids']
             if not order_update:
-                self.message_post(cr, uid, ids, body=body, context=context)
-            self.message_post(cr, uid, ids, body='%s complete.' % current.name, subtype='mt_comment', partner_ids=followers, context=context)
+                for id in ids:
+                    self.message_post(cr, uid, id, body=body, context=context)
+            for id in ids:
+                self.message_post(cr, uid, id, body='%s complete.' % current.name, subtype='mt_comment', partner_ids=followers, context=context)
             return True
         return False
 
@@ -339,6 +358,33 @@ class fnx_sr_shipping(osv.Model):
         'cancelled': sr_cancel,
         }
 fnx_sr_shipping()
+
+class fnx_sr_shipping_checkin(osv.osv_memory):
+    _name = 'fnx.sr.shipping.checkin'
+    _description = 'shipping & receiving driver checkin'
+
+    def more_checkin(self, cr, uid, ids, context=None):
+        if context is None:
+            return False
+        order_ids = context['active_ids']
+        #context['checkin'] = DateTime.now()
+        sr = self.pool.get('fnx.sr.shipping')
+        return sr.sr_checkin(cr, uid, order_ids, context=context)
+fnx_sr_shipping_checkin()
+
+class fnx_sr_shipping_checkout(osv.osv_memory):
+    _name = 'fnx.sr.shipping.checkout'
+    _description = 'shipping & receiving driver checkout'
+
+    def more_checkout(self, cr, uid, ids, context=None):
+        if context is None:
+            return False
+        order_ids = context['active_ids']
+        #context['checkout'] = DateTime.now()
+        sr = self.pool.get('fnx.sr.shipping')
+        return sr.sr_complete(cr, uid, order_ids, context=context)
+fnx_sr_shipping_checkout()
+
 
 # shipment status --> Draft, Scheduled (confirmed with carrier), Completed
 

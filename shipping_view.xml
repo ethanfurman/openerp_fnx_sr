@@ -8,6 +8,7 @@
         <record model="ir.ui.view" id="fnx_sr_calendar">
             <field name="name">fnx.sr.calendar</field>
             <field name="model">fnx.sr.shipping</field>
+            <field name="priority" eval="10"/>
             <field name="arch" type="xml">
                 <calendar string="Calendar View" color="state" date_start="appointment">
                     <field name="name"/>
@@ -21,6 +22,7 @@
         <record model="ir.ui.view" id="fnx_sr_tree">
             <field name="name">fnx.sr.tree</field>
             <field name="model">fnx.sr.shipping</field>
+            <field name="priority" eval="10"/>
             <field name="arch" type="xml">
                 <tree string="Tree View" toolbar="1" create="false">
                     <field name="direction"/>
@@ -38,6 +40,7 @@
         <record model="ir.ui.view" id="fnx_sr_form">
             <field name="name">fnx.sr.form</field>
             <field name="model">fnx.sr.shipping</field>
+            <field name="priority" eval="10"/>
             <field name="arch" type="xml">
                 <form string="Shipping &amp; Receiving" version="7.0" create="false">
                     <header>
@@ -114,6 +117,72 @@
                     </div>
                 </form>
             </field>
+        </record>
+
+        <record model="ir.ui.view" id="view_fnx_sr_driver_checkin">
+            <field name="name">Check-in Driver</field>
+            <field name="model">fnx.sr.shipping</field>
+            <field name="arch" type="xml">
+                <form string="Check-in Driver" version="7.0">
+                    <separator colspan="4" string="Check in driver for selected orders?"/>
+                    <footer>
+                        <button name="more_checkin" string="Check-In" type="object" />
+                    </footer>
+                </form>
+            </field>
+        </record>
+
+        <record model="ir.actions.act_window" id="action_fnx_sr_driver_checkin">
+            <field name="name">Check-in Driver</field>
+            <field name="type">ir.actions.act_window</field>
+            <field name="res_model">fnx.sr.shipping.checkin</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">form</field>
+            <field name="view_id" ref="view_fnx_sr_driver_checkin"/>
+            <field name="target">new</field>
+            <field name="multi">True</field>
+        </record>
+
+        <record model="ir.values" id="event_fnx_sr_driver_checkin">
+            <field name="name">Open Driver Check-In Form</field>
+            <field name="model_id" ref="fnx_sr.model_fnx_sr_shipping"/>
+            <field name="value" eval="'ir.actions.act_window,' + str(ref('action_fnx_sr_driver_checkin'))"/>
+            <field name="key">action</field>
+            <field name="key2">client_action_multi</field>
+            <field name="model">fnx.sr.shipping</field>
+        </record>
+
+        <record model="ir.ui.view" id="view_fnx_sr_driver_checkout">
+            <field name="name">Check-out Driver</field>
+            <field name="model">fnx.sr.shipping</field>
+            <field name="arch" type="xml">
+                <form string="Check-out Driver" version="7.0">
+                    <separator colspan="4" string="Check out driver for selected orders?"/>
+                    <footer>
+                        <button name="more_checkout" string="Check-Out" type="object" />
+                    </footer>
+                </form>
+            </field>
+        </record>
+
+        <record model="ir.actions.act_window" id="action_fnx_sr_driver_checkout">
+            <field name="name">Check-out Driver</field>
+            <field name="type">ir.actions.act_window</field>
+            <field name="res_model">fnx.sr.shipping.checkout</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">form</field>
+            <field name="view_id" ref="view_fnx_sr_driver_checkout"/>
+            <field name="target">new</field>
+            <field name="multi">True</field>
+        </record>
+
+        <record model="ir.values" id="event_fnx_sr_driver_checkout">
+            <field name="name">Open Driver Check-Out Form</field>
+            <field name="model_id" ref="fnx_sr.model_fnx_sr_shipping"/>
+            <field name="value" eval="'ir.actions.act_window,' + str(ref('action_fnx_sr_driver_checkout'))"/>
+            <field name="key">action</field>
+            <field name="key2">client_action_multi</field>
+            <field name="model">fnx.sr.shipping</field>
         </record>
 
         <record model="ir.ui.view" id="search_fnx_sr_open_orders">
