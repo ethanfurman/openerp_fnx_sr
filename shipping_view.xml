@@ -121,6 +121,45 @@
             </field>
         </record>
 
+        <record model="ir.ui.view" id="view_fnx_sr_schedule_appt">
+            <field name="name">Schedule Appointment</field>
+            <field name="model">fnx.sr.shipping</field>
+            <field name="arch" type="xml">
+                <form string="Schedule Appointment" version="7.0">
+                    <separator colspan="4" string="Schedule appointment for selected orders"/>
+                    <group>
+                        <group>
+                            <field name="appointment_date"/>
+                            <field name="appointment_time" widget="float_time"/>
+                        </group>
+                    </group>
+                    <footer>
+                        <button name="set_appt" string="Schedule" type="object"/>
+                    </footer>
+                </form>
+            </field>
+        </record>
+
+        <record model="ir.actions.act_window" id="action_fnx_sr_schedule_appt">
+            <field name="name">Schedule Appointment</field>
+            <field name="type">ir.actions.act_window</field>
+            <field name="res_model">fnx.sr.shipping.schedule_appt</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">form</field>
+            <field name="view_id" ref="view_fnx_sr_schedule_appt"/>
+            <field name="target">new</field>
+            <field name="multi">True</field>
+        </record>
+
+        <record model="ir.values" id="event_fnx_sr_schedule_appt">
+            <field name="name">Open Schedule Appointment Form</field>
+            <field name="model_id" ref="fnx_sr.model_fnx_sr_shipping"/>
+            <field name="value" eval="'ir.actions.act_window,' + str(ref('action_fnx_sr_schedule_appt'))"/>
+            <field name="key">action</field>
+            <field name="key2">client_action_multi</field>
+            <field name="model">fnx.sr.shipping</field>
+        </record>
+
         <record model="ir.ui.view" id="view_fnx_sr_driver_checkin">
             <field name="name">Check-in Driver</field>
             <field name="model">fnx.sr.shipping</field>

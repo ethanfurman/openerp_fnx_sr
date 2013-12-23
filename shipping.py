@@ -205,7 +205,7 @@ class fnx_sr_shipping(osv.Model):
             values['appt_scheduled_by_id'] = False
             values['check_in'] = False
             values['check_out'] = False
-        if self.write(cr, uid, ids, {'state':'draft'}, context=context):
+        if self.write(cr, uid, ids, values, context=context):
             if override:
                 context['mail_create_nosubscribe'] = True
                 self.message_post(cr, uid, ids, body="Reset to draft", context=context)
@@ -215,6 +215,8 @@ class fnx_sr_shipping(osv.Model):
     def sr_schedule(self, cr, uid, ids, context=None):
         if context is None:
             context = {}
+        if isinstance(ids, (int, long)):
+            ids = [ids]
         context['from_workflow'] = True
         user_tz = get_user_timezone(self, cr, uid)[uid]
         override = context.get('manager_override')
@@ -242,13 +244,16 @@ class fnx_sr_shipping(osv.Model):
                 body = 'Reset to scheduled.'
             if self.write(cr, uid, ids, values, context=context):
                 context['mail_create_nosubscribe'] = True
-                self.message_post(cr, uid, ids, body=body, context=context)
+                for id in ids:
+                    self.message_post(cr, uid, id, body=body, context=context)
                 return True
         return False
 
     def sr_appointment(self, cr, uid, ids, context=None):
         if context is None:
             context = {}
+        if isinstance(ids, (int, long)):
+            ids = [ids]
         context['from_workflow'] = True
         override = context.get('manager_override')
         values = {'state':'appt'}
@@ -263,13 +268,16 @@ class fnx_sr_shipping(osv.Model):
             body = 'Appointment cancelled.'
         if self.write(cr, uid, ids, values, context=context):
             context['mail_create_nosubscribe'] = True
-            self.message_post(cr, uid, ids, body=body, context=context)
+            for id in ids:
+                self.message_post(cr, uid, id, body=body, context=context)
             return True
         return False
 
     def sr_ready(self, cr, uid, ids, context=None):
         if context is None:
             context = {}
+        if isinstance(ids, (int, long)):
+            ids = [ids]
         context['from_workflow'] = True
         override = context.get('manager_override')
         values = {'state':'ready'}
@@ -283,7 +291,8 @@ class fnx_sr_shipping(osv.Model):
             body = 'Reset to Ready.'
         if self.write(cr, uid, ids, values, context=context):
             context['mail_create_nosubscribe'] = True
-            self.message_post(cr, uid, ids, body=body, context=context)
+            for id in ids:
+                self.message_post(cr, uid, id, body=body, context=context)
             return True
         return False
 
@@ -352,10 +361,13 @@ class fnx_sr_shipping(osv.Model):
     def sr_cancel(self, cr, uid, ids, context=None):
         if context is None:
             context = {}
+        if isinstance(ids, (int, long)):
+            ids = [ids]
         context['from_workflow'] = True
         if self.write(cr, uid, ids, {'state':'cancelled'}, context=context):
             context['mail_create_nosubscribe'] = True
-            self.message_post(cr, uid, ids, body='Order cancelled.', context=context)
+            for id in ids:
+                self.message_post(cr, uid, id, body='Order cancelled.', context=context)
             return True
         return False
 
@@ -370,6 +382,33 @@ class fnx_sr_shipping(osv.Model):
         }
 fnx_sr_shipping()
 
+class fnx_sr_shipping_schedule_appt(osv.osv_memory):
+    _name = 'fnx.sr.shipping.schedule_appt'
+    _description = 'schedule an appt for order pickup/delivery'
+
+    _columns = {
+        'appointment_date' : fields.date('Date'),
+        'appointment_time' : fields.float('Time'),
+        }
+
+    def set_appt(self, cr, uid, ids, context=None):
+        print '\n','-' * 30
+        print cr, uid, ids
+        print context
+        print '-'*30, '\n'
+        if context is None:
+            return False
+        if len(ids) > 1:
+            raise ValueError("Can only handle one id at a time")
+        order_ids = context['active_ids']
+        sr = self.pool.get('fnx.sr.shipping')
+        record = self.browse(cr, uid, ids[0], context=context)
+        values = {}
+        values['appointment_date'] = record.appointment_date
+        values['appointment_time'] = record.appointment_time
+        return sr.write(cr, uid, order_ids, values, context=context)
+fnx_sr_shipping_schedule_appt()
+
 class fnx_sr_shipping_checkin(osv.osv_memory):
     _name = 'fnx.sr.shipping.checkin'
     _description = 'shipping & receiving driver checkin'
@@ -378,7 +417,6 @@ class fnx_sr_shipping_checkin(osv.osv_memory):
         if context is None:
             return False
         order_ids = context['active_ids']
-        #context['checkin'] = DateTime.now()
         sr = self.pool.get('fnx.sr.shipping')
         return sr.sr_checkin(cr, uid, order_ids, context=context)
 fnx_sr_shipping_checkin()
@@ -391,7 +429,6 @@ class fnx_sr_shipping_checkout(osv.osv_memory):
         if context is None:
             return False
         order_ids = context['active_ids']
-        #context['checkout'] = DateTime.now()
         sr = self.pool.get('fnx.sr.shipping')
         return sr.sr_complete(cr, uid, order_ids, context=context)
 fnx_sr_shipping_checkout()
