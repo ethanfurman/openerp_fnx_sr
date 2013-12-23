@@ -170,7 +170,16 @@ class fnx_sr_shipping(osv.Model):
     def write(self, cr, uid, id, values, context=None):
         if context is None:
             context = {}
+        context['mail_create_nolog'] = True
+        context['mail_create_nosubscribe'] = True
         state = None
+        follower_ids = values.pop('local_contact_ids', [])
+        real_id = values.pop('real_id', None)
+        real_name = None
+        if real_id:
+            values['local_contact_id'] = real_id #res_users.browse(cr, uid, real_id, context=context)
+            follower_ids.append(real_id)
+            real_name = res_users.browse(cr, uid, real_id, context=context).partner_id.name
         if not context.pop('from_workflow', False):
             state = values.pop('state', None)
         result = super(fnx_sr_shipping, self).write(cr, uid, id, values, context=context)
@@ -179,6 +188,8 @@ class fnx_sr_shipping(osv.Model):
         if state is not None:
             wf = self.WORKFLOW[state]
             wf(self, cr, uid, id, context=context)
+        if follower_ids:
+            self.message_subscribe_users(cr, uid, id, user_ids=follower_ids, context=context)
         return result
 
     def sr_draft(self, cr, uid, ids, context=None):
