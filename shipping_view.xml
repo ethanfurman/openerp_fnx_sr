@@ -234,6 +234,7 @@
                     <field name="state" string="Status" />
                     <field name="local_source_document" string="Local Document" />
                     <field name="partner_source_document" string="Partner Document" />
+                    <field name="carrier_id" string="Carrier"  />
                     <separator/>
                     <filter string="Order Placed" name="type_draft" domain="[('state','=','draft')]"/>
                     <filter string="Scheduled" name="type_scheduled" domain="[('state','=','scheduled')]"/>

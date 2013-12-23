@@ -144,8 +144,9 @@ def main(file_to_process='', hostname='localhost', db=DB, user=USER, password=PW
         for file in trying:
             try:
                 order = get_order(file)
-                if order.get('carrier_xmlid', None) not in ("01","25","53","54","56","60"):  # see prep_fnx_sr.py and prep_fnx_sr_p.py
-                    update_order(order)
+                #if order.get('carrier_xmlid', None) not in ("01","25","53","54","56","60"):  # see prep_fnx_sr.py and prep_fnx_sr_p.py
+                #    update_order(order)
+                update_order(order)
                 dest = ARCHIVE
             except (BadFormat, MissingPartner), exc:
                 syslog(exc.message)
