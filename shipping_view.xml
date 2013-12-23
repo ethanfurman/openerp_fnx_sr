@@ -29,6 +29,8 @@
                     <field name="carrier_id"/>
                     <field name="appointment"/>
                     <field name="pallets"/>
+                    <field name="cartons"/>
+                    <field name="weight"/>
                     <field name="name"/>
                     <field name="partner_id"/>
                     <field name="partner_source_document"/>
