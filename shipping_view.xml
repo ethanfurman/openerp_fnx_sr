@@ -129,6 +129,7 @@
                     <separator colspan="4" string="Schedule appointment for selected orders"/>
                     <group>
                         <group>
+                            <field name="carrier_id" options="{'create':False, 'create_edit':False, 'limit':15}"/>
                             <field name="appointment_date"/>
                             <field name="appointment_time" widget="float_time"/>
                         </group>

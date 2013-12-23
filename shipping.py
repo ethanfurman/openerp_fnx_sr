@@ -386,16 +386,33 @@ class fnx_sr_shipping_schedule_appt(osv.osv_memory):
     _name = 'fnx.sr.shipping.schedule_appt'
     _description = 'schedule an appt for order pickup/delivery'
 
+    def get_carrier(self, cr, uid, context=None):
+        if context is None:
+            return False
+        order_ids = context['active_ids']
+        sr = self.pool.get('fnx.sr.shipping')
+        records = sr.browse(cr, uid, order_ids, context=context)
+        shipper = False
+        for rec in records:
+            if not rec.carrier_id:
+                continue
+            elif not rec.carrier_id.name.replace('_',''):
+                continue
+            shipper = rec.carrier_id.id
+            break
+        return shipper
+
     _columns = {
         'appointment_date' : fields.date('Date'),
         'appointment_time' : fields.float('Time'),
+        'carrier_id': fields.many2one('res.partner', 'Shipper', domain=[('is_carrier','=',True)]),
+        }
+
+    _defaults = {
+        'carrier_id': get_carrier,
         }
 
     def set_appt(self, cr, uid, ids, context=None):
-        print '\n','-' * 30
-        print cr, uid, ids
-        print context
-        print '-'*30, '\n'
         if context is None:
             return False
         if len(ids) > 1:
@@ -406,6 +423,7 @@ class fnx_sr_shipping_schedule_appt(osv.osv_memory):
         values = {}
         values['appointment_date'] = record.appointment_date
         values['appointment_time'] = record.appointment_time
+        values['carrier_id'] = record.carrier_id.id
         return sr.write(cr, uid, order_ids, values, context=context)
 fnx_sr_shipping_schedule_appt()
 
