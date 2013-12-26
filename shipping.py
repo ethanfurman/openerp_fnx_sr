@@ -389,7 +389,9 @@ class fnx_sr_shipping_schedule_appt(osv.osv_memory):
     def get_carrier(self, cr, uid, context=None):
         if context is None:
             return False
-        order_ids = context['active_ids']
+        order_ids = context.get('active_ids')
+        if order_ids is None:
+            return False
         sr = self.pool.get('fnx.sr.shipping')
         records = sr.browse(cr, uid, order_ids, context=context)
         shipper = False
@@ -417,7 +419,9 @@ class fnx_sr_shipping_schedule_appt(osv.osv_memory):
             return False
         if len(ids) > 1:
             raise ValueError("Can only handle one id at a time")
-        order_ids = context['active_ids']
+        order_ids = context.get('active_ids')
+        if order_ids is None:
+            return False
         sr = self.pool.get('fnx.sr.shipping')
         record = self.browse(cr, uid, ids[0], context=context)
         values = {}
