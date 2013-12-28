@@ -9,7 +9,15 @@
                 <field name="arch" type="xml">
                     <page name="page_history" position="before">
                         <page string="Shipments">
-                            <field name="shipped" nolabel="1">
+                            <field name="shipped" nolabel="1" attrs="{'invisible': [('is_carrier','=',True)]}">
+                                <tree>
+                                    <field name="name"/>
+                                    <field name="appointment"/>
+                                    <field name="partner_source_document"/>
+                                    <field name="state"/>
+                                </tree>
+                            </field>
+                            <field name="carried" nolabel="1" attrs="{'invisible': [('is_carrier','=',False)]}">
                                 <tree>
                                     <field name="name"/>
                                     <field name="appointment"/>

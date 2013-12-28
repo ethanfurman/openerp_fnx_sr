@@ -10,6 +10,7 @@ class res_partner(osv.Model):
 
     _columns = {
         'shipped': fields.one2many('fnx.sr.shipping', 'partner_id', 'Shipped Orders'),
+        'carried': fields.one2many('fnx.sr.shipping', 'carrier_id', 'Shipped Orders'),
         }
 
 res_partner()
