@@ -100,7 +100,7 @@ class fnx_sr_shipping(osv.Model):
 
         'name': fields.function(_document_name_get, type='char', string='Document', store=True),
         'direction': fields.selection([('incoming', 'Receiving'), ('outgoing', 'Shipping')], "Type of shipment", required=True),
-        'local_contact_id': fields.many2one('res.users', string='Local employee', ondelete='restrict'),
+        'local_contact_id': fields.many2one('res.partner', string='Local employee', ondelete='restrict'),
         'job_title': fields.selection([('sales', 'Sales Rep:'), ('purchasing', 'Purchaser:')], 'Job Title'),
         'preposition': fields.selection([('sales', 'to '), ('purchasing', 'from ')], 'Type of order'),
         'local_source_document': fields.char('Our document', size=32),
@@ -146,6 +146,9 @@ class fnx_sr_shipping(osv.Model):
 
 
     def create(self, cr, uid, values, context=None):
+        if 'carrier_id' not in values or not values['carrier_id']:
+            res_partner = self.pool.get('res.partner')
+            values['carrier_id'] = res_partner.search(cr, uid, [('xml_id','=','99'),('module','=','F27')])[0]
         if context == None:
             context = {}
         context['mail_create_nolog'] = True
@@ -168,18 +171,22 @@ class fnx_sr_shipping(osv.Model):
         return new_id
 
     def write(self, cr, uid, id, values, context=None):
+        if 'carrier_id' not in values or not values['carrier_id']:
+            res_partner = self.pool.get('res.partner')
+            values['carrier_id'] = res_partner.search(cr, uid, [('xml_id','=','99'),('module','=','F27')])[0]
         if context is None:
             context = {}
         context['mail_create_nolog'] = True
         context['mail_create_nosubscribe'] = True
         state = None
         follower_ids = values.pop('local_contact_ids', [])
-        real_id = values.pop('real_id', None)
+        login_id = values.pop('login_id', None)
         real_name = None
-        if real_id:
-            values['local_contact_id'] = real_id #res_users.browse(cr, uid, real_id, context=context)
-            follower_ids.append(real_id)
-            real_name = res_users.browse(cr, uid, real_id, context=context).partner_id.name
+        if login_id:
+            res_users = self.pool.get('res.users')
+            partner = res_users.browse(cr, uid, login_id, context=context).partner_id
+            values['local_contact_id'] = partner.id
+            follower_ids.append(login_id)
         if not context.pop('from_workflow', False):
             state = values.pop('state', None)
         result = super(fnx_sr_shipping, self).write(cr, uid, id, values, context=context)
@@ -370,6 +377,52 @@ class fnx_sr_shipping(osv.Model):
                 self.message_post(cr, uid, id, body='Order cancelled.', context=context)
             return True
         return False
+
+    def search(self, cr, user, args=None, offset=0, limit=None, order=None, context=None, count=False):
+        # 2013 08 12  (yyyy mm dd)
+        new_args = []
+        for arg in args:
+            if not isinstance(arg, list) or arg[0] != 'date' or arg[2] not in ['THIS_WEEK', 'LAST_WEEK', 'THIS_MONTH', 'LAST_MONTH']:
+                new_args.append(arg)
+                continue
+            today = Date.today()
+            period = arg[2]
+            if period == 'THIS_WEEK':
+                start = today.replace(day=RelativeDay.LAST_MONDAY)
+                stop = start.replace(delta_day=6)
+            elif period == 'LAST_WEEK':
+                start = today.replace(day=RelativeDay.LAST_MONDAY, delta_day=-7)
+                stop = start.replace(delta_day=6)
+            elif period == 'THIS_MONTH':
+                start = today.replace(day=1)
+                stop = start.replace(delta_month=1, delta_day=-1)
+            elif period == 'LAST_MONTH':
+                start = today.replace(day=1, delta_month=-1)
+                stop = start.replace(delta_month=1, delta_day=-1)
+            else:
+                raise ValueError("forgot to update something! (period is %r)" % (arg[2],))
+            op = arg[1]
+            if arg[1] in ('=', 'in'):
+                op = '&'
+                first = '>='
+                last = '<='
+            elif arg[1] in ('!=', 'not in'):
+                op = '|'
+                first = '<'
+                last = '>'
+            if op != arg[1]:
+                new_args.append(op)
+                new_args.append(['date', first, start.strftime('%Y-%m-%d')])
+                new_args.append(['date', last, stop.strftime('%Y-%m-%d')])
+            elif '<' in op:
+                new_args.append(['date', op, start.strftime('%Y-%m-%d')])
+            elif '>' in op:
+                new_args.append(['date', op, last.strftime('%Y-%m-%d')])
+            else:
+                raise ValueError('unable to process domain: %r' % arg)
+        result = super(fnx_sr_shipping, self).search(cr, user, args=new_args, offset=offset, limit=limit, order=order, context=context, count=count)
+        #print result
+        return result
 
     WORKFLOW = {
         'draft': sr_draft,

@@ -9,7 +9,10 @@
                 <field name="arch" type="xml">
                     <page name="page_history" position="before">
                         <page string="Shipments">
-                            <field name="shipped" nolabel="1" attrs="{'invisible': [('is_carrier','=',True)]}">
+                            <field name="fnxsr_shipped"
+                                   nolabel="1"
+                                   attrs="{'invisible': [('customer','=',False),('supplier','=',False)]}"
+                                   domain="[('fnxsr_shipped.state','=','draft')]">
                                 <tree>
                                     <field name="name"/>
                                     <field name="appointment"/>
@@ -17,7 +20,19 @@
                                     <field name="state"/>
                                 </tree>
                             </field>
-                            <field name="carried" nolabel="1" attrs="{'invisible': [('is_carrier','=',False)]}">
+                            <field name="fnxsr_carried"
+                                   nolabel="1"
+                                   attrs="{'invisible': [('is_carrier','=',False)]}">
+                                <tree>
+                                    <field name="name"/>
+                                    <field name="appointment"/>
+                                    <field name="partner_source_document"/>
+                                    <field name="state"/>
+                                </tree>
+                            </field>
+                            <field name="fnxsr_orders"
+                                   nolabel="1"
+                                   attrs="{'invisible': ['|','|',('is_carrier','=',True),('customer','=',True),('supplier','=',True)]}">
                                 <tree>
                                     <field name="name"/>
                                     <field name="appointment"/>

@@ -9,8 +9,9 @@ class res_partner(osv.Model):
     _inherit = 'res.partner'
 
     _columns = {
-        'shipped': fields.one2many('fnx.sr.shipping', 'partner_id', 'Shipped Orders'),
-        'carried': fields.one2many('fnx.sr.shipping', 'carrier_id', 'Shipped Orders'),
+        'fnxsr_shipped': fields.one2many('fnx.sr.shipping', 'partner_id', 'Shipped Orders'),
+        'fnxsr_carried': fields.one2many('fnx.sr.shipping', 'carrier_id', 'Shipped Orders'),
+        'fnxsr_orders': fields.one2many('fnx.sr.shipping', 'local_contact_id', 'Shipped Orders'),
         }
 
 res_partner()
