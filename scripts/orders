@@ -131,6 +131,31 @@ def connect_oe(hostname, database, user, password):
         login=('login name to use', ),
         password=('password for login name', ),
         )
+def find_duplicates(hostname='localhost', db=DB, login=USER, password=PW):
+    """Look for duplicate orders; print any found"""
+    connect_oe(hostname, db, login, password)
+    records = OE.fnx_shipping.search_read(fields=['id', 'local_source_document'], )
+    order_numbers = set()
+    duplicates = list()
+    pb = ProgressBar(len(records), message="processing %d records" % len(records))
+    for sr in records:
+        pb.tick()
+        sr = PropertyDict(sr)
+        if sr.local_source_document in order_numbers:
+            duplicates.append(sr.local_source_document)
+        else:
+            order_numbers.add(sr.local_source_document)
+    if duplicates:
+        print '\nDuplicates found:\n'
+        for dup in sorted(duplicates):
+            print '\t', dup
+
+@Command(
+        hostname=('host where OpenERP instance is running', ),
+        db=('database to use', ),
+        login=('login name to use', ),
+        password=('password for login name', ),
+        )
 def fix_carriers(hostname='localhost', db=DB, login=USER, password=PW):
     """compare OE values for carrier with values in files -- if OE value is '99'
     and file value is not, set to file value"""
