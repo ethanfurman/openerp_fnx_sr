@@ -171,9 +171,6 @@ class fnx_sr_shipping(osv.Model):
         return new_id
 
     def write(self, cr, uid, id, values, context=None):
-        if 'carrier_id' not in values or not values['carrier_id']:
-            res_partner = self.pool.get('res.partner')
-            values['carrier_id'] = res_partner.search(cr, uid, [('xml_id','=','99'),('module','=','F27')])[0]
         if context is None:
             context = {}
         context['mail_create_nolog'] = True
