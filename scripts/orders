@@ -146,7 +146,7 @@ def find_duplicates(hostname='localhost', db=DB, login=USER, password=PW):
         else:
             order_numbers.add(sr.local_source_document)
     if duplicates:
-        print '\nDuplicates found:\n'
+        print '\n%d duplicates found in %d orders:\n' % (len(duplicates), len(records))
         for dup in sorted(duplicates):
             print '\t', dup
 
