@@ -126,17 +126,19 @@ def connect_oe(hostname, database, user, password):
     OE.fnx_shipping = conn.get_model('fnx.sr.shipping')
 
 @Command(
+        remove=('remove identical duplicates', 'flag', ),
         hostname=('host where OpenERP instance is running', ),
         db=('database to use', ),
         login=('login name to use', ),
         password=('password for login name', ),
         )
-def find_duplicates(hostname='localhost', db=DB, login=USER, password=PW):
+def find_duplicates(hostname='localhost', db=DB, login=USER, password=PW, remove=False):
     """Look for duplicate orders; print any found"""
     connect_oe(hostname, db, login, password)
     records = OE.fnx_shipping.search_read(fields=['id', 'local_source_document'], )
     order_numbers = set()
     duplicates = list()
+    removed = list()
     pb = ProgressBar(len(records), message="processing %d records" % len(records))
     for sr in records:
         pb.tick()
@@ -147,6 +149,12 @@ def find_duplicates(hostname='localhost', db=DB, login=USER, password=PW):
             order_numbers.add(sr.local_source_document)
     if duplicates:
         print '\n%d duplicates found in %d orders:\n' % (len(duplicates), len(records))
+        if remove:
+            for dup in duplicates:
+                dups = OE.fnx_shipping.search_read(domain=[('local_source_document','=',dup)])
+                for d in dups:
+                    print d
+                raw_input('...')
         for dup in sorted(duplicates):
             print '\t', dup
 
