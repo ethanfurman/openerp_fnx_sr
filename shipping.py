@@ -148,31 +148,39 @@ class fnx_sr_shipping(osv.Model):
 
 
     def create(self, cr, uid, values, context=None):
-        if 'carrier_id' not in values or not values['carrier_id']:
-            res_partner = self.pool.get('res.partner')
-            values['carrier_id'] = res_partner.search(cr, uid, [('xml_id','=','99'),('module','=','F27')])[0]
-        if 'partner_id' not in values or not values['partner_id']:
-            raise ValueError('partner not specified'
         if context == None:
             context = {}
+        res_partner = self.pool.get('res.partner')
+        res_users = self.pool.get('res.users')
+        if 'carrier_id' not in values or not values['carrier_id']:
+            values['carrier_id'] = res_partner.search(cr, uid, [('xml_id','=','99'),('module','=','F27')])[0]
+        if 'partner_id' not in values or not values['partner_id']:
+            raise ValueError('partner not specified')
         context['mail_create_nolog'] = True
         context['mail_create_nosubscribe'] = True
-        res_partners = self.pool.get('res.partners')
-        partner = res_partners.browse(cr, uid, values['partner_id'])
+        partner = res_partner.browse(cr, uid, values['partner_id'])
+        print
         print partner.message_follower_ids
-        partner_followers = [p.id for p in res_partners.message_follower_ids if p.id is not 1]
-        res_users = self.pool.get('res.users')
+        print
+        partner_follower_ids = [p.id for p in partner.message_follower_ids]
+        print partner_follower_ids
+        user_follower_ids = res_users.search(cr, uid, [('partner_id','in',partner_follower_ids)])
+        if 1 in user_follower_ids:
+            user_follower_ids.remove(1)
+        print user_follower_ids
+        print
         real_id = values.pop('real_id', None)
         real_name = None
         direction = DIRECTION[values['direction']].title()
         body = '%s order created' % direction
         follower_ids = values.pop('local_contact_ids', [])
-        follower_ids.extend(partner_followers)
+        follower_ids.extend(user_follower_ids)
         if real_id:
             values['local_contact_id'] = real_id #res_users.browse(cr, uid, real_id, context=context)
             follower_ids.append(real_id)
             real_name = res_users.browse(cr, uid, real_id, context=context).partner_id.name
             body = 'Order received from %s %s' % ({'Purchase':'Purchaser', 'Sale':'Sales Rep'}[direction], real_name)
+        print values
         new_id = super(fnx_sr_shipping, self).create(cr, uid, values, context=context)
         self.message_post(cr, uid, new_id, body=body, context=context)
         if follower_ids:
