@@ -44,15 +44,11 @@ def archive(src_file, dest=ARCHIVE):
     src_file = Path(src_file)
     basename = src_file.filename.split('_')[0]
     existing = glob(dest/basename+'*')
-    if not existing:
+    existing.sort()
+    if not existing or '_' not in existing[-1]:
         dst_file = dest/basename + '_01'
     else:
-        existing.sort()
-        try:
-            dst_file, count = existing[-1].split('_')
-        except ValueError:
-            print "unable to archive %s" % src_file
-            return
+        dst_file, count = existing[-1].split('_')
         count = int(count) + 1
         dst_file += '_%02d' % count
     shutil.move(src_file, dst_file)
