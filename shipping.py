@@ -437,9 +437,7 @@ class fnx_sr_shipping(osv.Model):
                 new_args.append(['date', op, last.strftime('%Y-%m-%d')])
             else:
                 raise ValueError('unable to process domain: %r' % arg)
-        result = super(fnx_sr_shipping, self).search(cr, user, args=new_args, offset=offset, limit=limit, order=order, context=context, count=count)
-        #print result
-        return result
+        return super(fnx_sr_shipping, self).search(cr, user, args=new_args, offset=offset, limit=limit, order=order, context=context, count=count)
 
     WORKFLOW = {
         'draft': sr_draft,
@@ -525,12 +523,6 @@ class fnx_sr_shipping_checkout(osv.osv_memory):
         return sr.sr_complete(cr, uid, order_ids, context=context)
 fnx_sr_shipping_checkout()
 
-
-# shipment status --> Draft, Scheduled (confirmed with carrier), Completed
-
-# order status --> Draft, Confirmed, Ready, Completed
-
-# appt
 
 # get order --> Draft
 # spoken with carrier --> Confirmed (good date)
