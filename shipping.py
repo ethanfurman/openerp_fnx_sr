@@ -174,6 +174,13 @@ class fnx_sr_shipping(osv.Model):
             follower_ids.append(real_id)
             real_name = res_users.browse(cr, uid, real_id, context=context).partner_id.name
             body = 'Order received from %s %s' % ({'Purchase':'Purchaser', 'Sale':'Sales Rep'}[direction], real_name)
+        if 'appointment_date' in values:
+            try:
+                appt = Date.fromymd(values['appointment_date'])
+            except ValueError:
+                appt = Date.fromymd(values['appointment_date'][:-2] + '01')
+                appt = appt.replace(delta_month=1)
+                values['appointment_date'] = appt.ymd()
         new_id = super(fnx_sr_shipping, self).create(cr, uid, values, context=context)
         if user_follower_ids:
             self.message_post(cr, uid, new_id, body=body, partner_ids=partner_follower_ids, subtype='mt_comment', context=context)
