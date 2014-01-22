@@ -174,6 +174,13 @@ class fnx_sr_shipping(osv.Model):
             follower_ids.append(real_id)
             real_name = res_users.browse(cr, uid, real_id, context=context).partner_id.name
             body = 'Order received from %s %s' % ({'Purchase':'Purchaser', 'Sale':'Sales Rep'}[direction], real_name)
+        if 'appointment_date' in values:
+            try:
+                appt = Date.fromymd(values['appointment_date'])
+            except ValueError:
+                appt = Date.fromymd(values['appointment_date'][:-2] + '01')
+                appt = appt.replace(delta_month=1)
+                values['appointment_date'] = appt.ymd()
         new_id = super(fnx_sr_shipping, self).create(cr, uid, values, context=context)
         if user_follower_ids:
             self.message_post(cr, uid, new_id, body=body, partner_ids=partner_follower_ids, subtype='mt_comment', context=context)
@@ -430,9 +437,7 @@ class fnx_sr_shipping(osv.Model):
                 new_args.append(['date', op, last.strftime('%Y-%m-%d')])
             else:
                 raise ValueError('unable to process domain: %r' % arg)
-        result = super(fnx_sr_shipping, self).search(cr, user, args=new_args, offset=offset, limit=limit, order=order, context=context, count=count)
-        #print result
-        return result
+        return super(fnx_sr_shipping, self).search(cr, user, args=new_args, offset=offset, limit=limit, order=order, context=context, count=count)
 
     WORKFLOW = {
         'draft': sr_draft,
@@ -518,12 +523,6 @@ class fnx_sr_shipping_checkout(osv.osv_memory):
         return sr.sr_complete(cr, uid, order_ids, context=context)
 fnx_sr_shipping_checkout()
 
-
-# shipment status --> Draft, Scheduled (confirmed with carrier), Completed
-
-# order status --> Draft, Confirmed, Ready, Completed
-
-# appt
 
 # get order --> Draft
 # spoken with carrier --> Confirmed (good date)
