@@ -67,13 +67,6 @@ class fnx_sr_shipping(osv.Model):
                 result[id] = float(check_out - check_in)
         return result
 
-    def _current_user_is_manager(self, cr, uid, ids, field, _arg, context=None):
-        res_users = self.pool.get('res.users')
-        result= {}
-        for id in ids:
-            result[id] = res_users.has_group(cr, uid, 'fnx_sr.group_fnx_sr_manager')
-        return result
-
     def _generate_order_by(self, order_spec, query):
         "correctly orders state field if state is in query"
         order_by = super(fnx_sr_shipping, self)._generate_order_by(order_spec, query)
@@ -140,7 +133,6 @@ class fnx_sr_shipping(osv.Model):
         'appt_confirmed_on': fields.datetime('Confirmed on', help="When the appointment was confirmed with the carrier"),
         'check_in': fields.datetime('Driver checked in at',),
         'check_out': fields.datetime('Driver checked out at'),
-        'is_manager': fields.function(_current_user_is_manager, type='boolean'),
         'warehouse_comment': fields.function(_res_partner_warehouse_comment, type='char')
         }
 

@@ -65,7 +65,7 @@
                                         <p>
                                             Order placed by
                                             <field name="job_title" class="oe_inline" attrs="{'readonly':True}"/>
-                                            <field name="local_contact_id" class="oe_inline" attrs="{'readonly':[('is_manager','=',False)]}"/>
+                                            <field name="local_contact_id" class="oe_inline" readonly="not groups('fnx_sr.group_fnx_sr_manager')"/>
                                         </p>
                                     </h3>
                                 </div>
@@ -80,8 +80,8 @@
                                 <field name="appointment_date" class="oe_inline"/>
                                 <field name="appointment_time" class="oe_inline" widget="float_time"/>
                                 <separator colspan="2"/>
-                                <field name="check_in" attrs="{'readonly':[('is_manager','=',False)]}"/>
-                                <field name="check_out" attrs="{'readonly':[('is_manager','=',False)]}"/>
+                                <field name="check_in" readonly="not groups('fnx_sr.group_fnx_sr_manager')"/>
+                                <field name="check_out" readonly="not groups('fnx_sr.group_fnx_sr_manager')"/>
                                 <field name="duration" widget="float_time"/>
                             </group>
                             <group>
@@ -89,9 +89,8 @@
                                 <field name="cartons" attrs="{'readonly':True}"/>
                                 <field name="pallets" attrs="{'readonly':True}"/>
                                 <separator colspan="2"/>
-                                <field name="appt_scheduled_by_id" attrs="{'readonly':[('is_manager','=',False)]}"/>
-                                <field name="appt_confirmed_on" attrs="{'readonly':[('is_manager','=',False)]}"/>
-                                <field name="is_manager" attrs="{'invisible':True}"/>
+                                <field name="appt_scheduled_by_id" readonly="not groups('fnx_sr.group_fnx_sr_manager')"/>
+                                <field name="appt_confirmed_on" readonly="not groups('fnx_sr.group_fnx_sr_manager')"/>
                             </group>
                         </group>
                         <notebook>
@@ -101,7 +100,7 @@
                             <page string="Order Comments">
                                 <field name="comment"/>
                             </page>
-                            <page string="Manager Overrides" attrs="{'invisible':[('is_manager','=',False)]}">
+                            <page string="Manager Overrides" invisible="not groups('fnx_sr.group_fnx_sr_manager')">
                                 <separator string="Reset state to"/>
                                 <button string="Order Placed" name="sr_draft" type="object" context="{'manager_override':True}"/>
                                 <button string="Scheduled" name="sr_schedule" type="object" context="{'manager_override':True}"/>
