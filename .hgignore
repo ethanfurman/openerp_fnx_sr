@@ -3,3 +3,10 @@ syntax: glob
 .*.swp
 *~
 .*~
+scripts/find_missing
+scripts/fix_carriers
+scripts/manual_update
+scripts/update_orders
+test
+*.rej
+*.orig
