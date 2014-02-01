@@ -67,13 +67,6 @@ class fnx_sr_shipping(osv.Model):
                 result[id] = float(check_out - check_in)
         return result
 
-    def _current_user_is_manager(self, cr, uid, ids, field, _arg, context=None):
-        res_users = self.pool.get('res.users')
-        result= {}
-        for id in ids:
-            result[id] = res_users.has_group(cr, uid, 'fnx_sr.group_fnx_sr_manager')
-        return result
-
     def _generate_order_by(self, order_spec, query):
         "correctly orders state field if state is in query"
         order_by = super(fnx_sr_shipping, self)._generate_order_by(order_spec, query)
@@ -140,7 +133,6 @@ class fnx_sr_shipping(osv.Model):
         'appt_confirmed_on': fields.datetime('Confirmed on', help="When the appointment was confirmed with the carrier"),
         'check_in': fields.datetime('Driver checked in at',),
         'check_out': fields.datetime('Driver checked out at'),
-        'is_manager': fields.function(_current_user_is_manager, type='boolean'),
         'warehouse_comment': fields.function(_res_partner_warehouse_comment, type='char')
         }
 
@@ -367,20 +359,22 @@ class fnx_sr_shipping(osv.Model):
         if not order_update:
             values['check_out'] = DateTime.now()
             body = 'Driver checked out at %s' % values['check_out']
-        current = self.browse(cr, uid, ids, context=context)[0]
-        if override:
-            values['check_out'] = current.check_out or False
-            body = 'Reset to Complete.'
-        if self.write(cr, uid, ids, values, context=context):
-            context['mail_create_nosubscribe'] = True
-            followers = self._get_followers(cr, uid, ids, None, None, context=context)[ids[0]]['message_follower_ids']
-            if not order_update:
-                for id in ids:
+        for id in ids:
+            current = self.browse(cr, uid, id, context=context)
+            if override:
+                values['check_out'] = current.check_out or False
+                body = 'Reset to Complete.'
+            if self.write(cr, uid, id, values, context=context):
+                context['mail_create_nosubscribe'] = True
+                followers = self._get_followers(cr, uid, [id], None, None, context=context)[id]['message_follower_ids']
+                if not order_update:
                     self.message_post(cr, uid, id, body=body, context=context)
-            for id in ids:
-                self.message_post(cr, uid, id, body='%s complete.' % current.name, subtype='mt_comment', partner_ids=followers, context=context)
-            return True
-        return False
+                if current.direction == 'incoming':
+                    message = 'Complete:  received from %s.' % current.partner_id.name
+                else:
+                    message = 'Complete:  shipped to %s.' % current.partner_id.name
+                self.message_post(cr, uid, id, body=message, subtype='mt_comment', partner_ids=followers, context=context)
+        return True
 
     def sr_cancel(self, cr, uid, ids, context=None):
         if context is None:
