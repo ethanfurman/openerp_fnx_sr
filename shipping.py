@@ -158,7 +158,11 @@ class fnx_sr_shipping(osv.Model):
         real_id = values.pop('real_id', None)
         real_name = None
         direction = DIRECTION[values['direction']].title()
-        body = '%s order %s %s created' % (direction, values['preposition'], partner.name)
+        body = '%s order %s %s created' % (
+                direction,
+                ('to', 'from')[direction=='sale'],
+                partner.name,
+                )
         follower_ids = values.pop('local_contact_ids', [])
         follower_ids.extend(user_follower_ids)
         if real_id:
