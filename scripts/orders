@@ -281,14 +281,14 @@ def update(file_to_process='', hostname='localhost', db=DB, login=USER, password
                 dest = ARCHIVE
             except (BadFormat, MissingPartner), exc:
                 syslog(exc.message)
-                failing.append(file)
+                failing.append('%s: %s' % (file, exc.message))
                 dest = ERRORS
             except Exception:
                 log_exception()
                 raise
             archive(file, dest)
     if failed:
-        raise Exception("Unable to process orders: %r" % ', '.join(failed))
+        raise Exception("Unable to process orders:\n\t%r" % '\n\t'.join(failed))
 
 if __name__ == '__main__':
     Run()
