@@ -281,9 +281,12 @@ def update(file_to_process='', hostname='localhost', db=DB, login=USER, password
                 order = get_order(file)
                 update_order(order)
                 dest = ARCHIVE
-            except (BadFormat, MissingPartner, IOError), exc:
+            except (BadFormat, MissingPartner, ), exc:
                 failing.append('%s: %s' % (file, exc.message))
                 dest = ERRORS
+            except (IOError, ), exc:
+                failing.append('%s: %s' % (file, exc.message))
+                continue
             except Exception:
                 log_exception()
                 raise
