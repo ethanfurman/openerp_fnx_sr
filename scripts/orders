@@ -292,7 +292,7 @@ def update(file_to_process='', hostname='localhost', db=DB, login=USER, password
                 raise
             archive(file, dest)
     if failed:
-        raise Exception("Unable to process orders:\n\t%r" % '\n\t'.join(failed))
+        raise Exception("Unable to process orders:\n\t%s" % '\n\t'.join(failed))
 
 if __name__ == '__main__':
     Run()
