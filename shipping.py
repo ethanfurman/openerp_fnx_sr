@@ -158,14 +158,24 @@ class fnx_sr_shipping(osv.Model):
         real_id = values.pop('real_id', None)
         real_name = None
         direction = DIRECTION[values['direction']].title()
-        body = '%s order created' % direction
+        body = '%s order %s %s created' % (
+                direction,
+                ('to', 'from')[direction=='sale'],
+                partner.name,
+                )
         follower_ids = values.pop('local_contact_ids', [])
         follower_ids.extend(user_follower_ids)
         if real_id:
             values['local_contact_id'] = real_id #res_users.browse(cr, uid, real_id, context=context)
             follower_ids.append(real_id)
             real_name = res_users.browse(cr, uid, real_id, context=context).partner_id.name
-            body = 'Order received from %s %s' % ({'Purchase':'Purchaser', 'Sale':'Sales Rep'}[direction], real_name)
+            body = '%s submitted %s order %s %s %s' % (
+                    real_name,
+                    direction,
+                    local_source_document,
+                    ('to', 'for')[direction=='sale'],
+                    partner.name,
+                    )
         if 'appointment_date' in values:
             try:
                 appt = Date.fromymd(values['appointment_date'])

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from scription import Script, Command, Run, log_exception, mail
+from scription import Script, Command, Run, mail
 from syslog import syslog
 from VSS import Date
 from VSS.path import Path, listdir, glob
@@ -117,12 +117,14 @@ def update_order(values):
         try:
             OE.fnx_shipping.create(dict(values))
         except Exception, exc:
-            log_exception(exc.faultCode)
+            print(exc.faultCode)
+            print
     else:
         try:
             OE.fnx_shipping.write([order['id']], dict(values))
         except Exception, exc:
-            log_exception(exc.faultCode)
+            print(exc.faultCode)
+            print
 
 def get_files(source=SOURCE):
     files = [SOURCE/f for f in SOURCE.listdir() if f != 'order_template']
@@ -279,16 +281,18 @@ def update(file_to_process='', hostname='localhost', db=DB, login=USER, password
                 order = get_order(file)
                 update_order(order)
                 dest = ARCHIVE
-            except (BadFormat, MissingPartner), exc:
-                syslog(exc.message)
-                failing.append(file)
+            except (BadFormat, MissingPartner, ), exc:
+                failing.append('%s: %s' % (file, exc.message))
                 dest = ERRORS
+            except (IOError, ), exc:
+                failing.append('%s: %s' % (file, exc.message))
+                continue
             except Exception:
                 log_exception()
                 raise
             archive(file, dest)
     if failed:
-        raise Exception("Unable to process orders: %r" % ', '.join(failed))
+        raise Exception("Unable to process orders:\n\t%s" % '\n\t'.join(failed))
 
 if __name__ == '__main__':
     Run()
