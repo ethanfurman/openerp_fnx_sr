@@ -151,6 +151,7 @@ class fnx_sr_shipping(osv.Model):
         context['mail_create_nolog'] = True
         context['mail_create_nosubscribe'] = True
         partner = res_partner.browse(cr, uid, values['partner_id'])
+        # partner_follower_ids dance is so we don't include Administrator
         partner_follower_ids = [p.id for p in partner.message_follower_ids]
         user_follower_ids = res_users.search(cr, uid, [('partner_id','in',partner_follower_ids),('id','!=',1)])
         user_follower_records = res_users.browse(cr, uid, user_follower_ids)
@@ -184,7 +185,7 @@ class fnx_sr_shipping(osv.Model):
                 appt = appt.replace(delta_month=1)
                 values['appointment_date'] = appt.ymd()
         new_id = super(fnx_sr_shipping, self).create(cr, uid, values, context=context)
-        if user_follower_ids:
+        if partner_follower_ids:
             self.message_post(cr, uid, new_id, body=body, partner_ids=partner_follower_ids, subtype='mt_comment', context=context)
         else:
             self.message_post(cr, uid, new_id, body=body, context=context)
