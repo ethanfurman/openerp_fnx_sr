@@ -294,4 +294,3 @@ def update(file_to_process='', hostname='localhost', db=DB, login=USER, password
 
 if __name__ == '__main__':
     Run()
-
