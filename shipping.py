@@ -136,7 +136,7 @@ class fnx_sr_shipping(osv.Model):
         'warehouse_comment': fields.function(_res_partner_warehouse_comment, type='char')
         }
 
-    _sql_constraint = [ ('lsd_unique', 'unique(local_source_document', 'Already have that source document in the system') ]
+    _sql_constraints = [ ('lsd_unique', 'unique(local_source_document', 'Already have that source document in the system') ]
 
 
     def create(self, cr, uid, values, context=None):
