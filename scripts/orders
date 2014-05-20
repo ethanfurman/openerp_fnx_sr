@@ -57,6 +57,8 @@ def archive(src_file, dest=ARCHIVE):
 def get_order(order):
     g = {}
     execfile(order, g)
+    if 'order' not in g:
+        raise BadFormat('empty file?')
     return PropertyDict(g['order'])
 
 def update_order(values):
