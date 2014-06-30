@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from pandaemonium import PidLockFile, AlreadyLocked
 from scription import Script, Command, Run, mail
 from syslog import syslog
 from VSS import Date
@@ -140,6 +141,7 @@ def connect_oe(hostname, database, user, password):
     OE.res_users = conn.get_model('res.users')
     OE.fnx_shipping = conn.get_model('fnx.sr.shipping')
 
+
 @Command(
         remove=('remove identical duplicates', 'flag', ),
         hostname=('host where OpenERP instance is running', ),
@@ -163,7 +165,9 @@ def find_duplicates(hostname='localhost', db=DB, login=USER, password=PW, remove
             duplicates.append(sr.local_source_document)
         else:
             order_numbers.add(sr.local_source_document)
-    if duplicates:
+    if not duplicates:
+        print '\nNo duplicates found.\n'
+    else:
         print '\n%d duplicates found in %d orders:\n' % (len(duplicates), len(records))
         if remove:
             pb = ProgressBar(len(duplicates), message='checking %d records' % len(duplicates))
@@ -212,8 +216,7 @@ def find_duplicates(hostname='localhost', db=DB, login=USER, password=PW, remove
             print '\n\nremaining...'
         for dup in sorted(duplicates):
             print '\t', dup
-    else:
-        print '\nNo duplicates found.\n'
+
 
 @Command(
         hostname=('host where OpenERP instance is running', ),
@@ -249,6 +252,7 @@ def fix_carriers(hostname='localhost', db=DB, login=USER, password=PW):
             values = {'carrier_id':carrier_id}
             OE.fnx_shipping.write([sr.id], values)
 
+
 @Command(
         values=('settings to use', 'keyword', ),
         hostname=('host where OpenERP instance is running', ),
@@ -259,6 +263,7 @@ def fix_carriers(hostname='localhost', db=DB, login=USER, password=PW):
 def manual_update(hostname='localhost', db=DB, login=USER, password=PW, **values):
     connect_oe(hostname, db, login, password)
     update_order(PropertyDict(values))
+
 
 @Command(
         file_to_process=('order to add/update in system', ),
@@ -295,4 +300,9 @@ def update(file_to_process='', hostname='localhost', db=DB, login=USER, password
         raise Exception("Unable to process orders:\n\t%s" % '\n\t'.join(failed))
 
 if __name__ == '__main__':
-    Run()
+    try:
+        lock = PidLockFile('/var/run/fnxsr-order_update.pid')
+        with lock:
+            Run()
+    except AlreadyLocked:
+        pass
