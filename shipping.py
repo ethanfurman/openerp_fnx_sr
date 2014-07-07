@@ -26,6 +26,7 @@ class fnx_sr_shipping(osv.Model):
     _name = 'fnx.sr.shipping'
     _description = 'shipping & receiving'
     _inherit = ['mail.thread']
+    _inherits = {'res.partner':'partner_id'}
     _order = 'appointment_date asc, appointment_time asc, state desc'
     _rec_name = 'name'
     _mail_flat_thread = False
@@ -79,16 +80,6 @@ class fnx_sr_shipping(osv.Model):
             order_by = order_by.replace('"%s"."state" ' % self._table, state_order)
         return order_by
 
-    def _res_partner_warehouse_comment(self, cr, uid, ids, field, _arg, context=None):
-        if not ids:
-            return {}
-        result = {}
-        res_partner = self.pool.get('res.partner')
-        for id in ids:
-            record = self.browse(cr, uid, id, context=context)
-            result[id] = record.partner_id.warehouse_comment
-        return result
-
     _columns = {
 
         'name': fields.function(_document_name_get, type='char', string='Document', store=True),
@@ -133,10 +124,9 @@ class fnx_sr_shipping(osv.Model):
         'appt_confirmed_on': fields.datetime('Confirmed on', help="When the appointment was confirmed with the carrier"),
         'check_in': fields.datetime('Driver checked in at',),
         'check_out': fields.datetime('Driver checked out at'),
-        'warehouse_comment': fields.function(_res_partner_warehouse_comment, type='char')
         }
 
-    _sql_constraints = [ ('lsd_unique', 'unique(local_source_document', 'Already have that source document in the system') ]
+    _sql_constraints = [ ('lsd_unique', 'unique(local_source_document)', 'Already have that source document in the system') ]
 
 
     def create(self, cr, uid, values, context=None):
@@ -156,7 +146,7 @@ class fnx_sr_shipping(osv.Model):
         user_follower_ids = res_users.search(cr, uid, [('partner_id','in',partner_follower_ids),('id','!=',1)])
         user_follower_records = res_users.browse(cr, uid, user_follower_ids)
         partner_follower_ids = [u.partner_id.id for u in user_follower_records]
-        real_id = values.pop('real_id', None)
+        real_id = values.pop('login_id', None)
         real_name = None
         direction = DIRECTION[values['direction']].title()
         body = '%s order %s %s created' % (

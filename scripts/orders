@@ -65,6 +65,7 @@ def get_order(order):
 def update_order(values):
     if not values.local_source_document:
         raise BadFormat('missing local source document')
+    context = PropertyDict()
     local_contacts = values.pop('local_contact', None)
     if local_contacts is not None:
         if 'sysadmin' in local_contacts:
@@ -77,7 +78,7 @@ def update_order(values):
         if not records:
             raise MissingPartner('unable to find partner %r' % partner_xmlid)
         partner_id = records[0]['id']
-        values.partner_id = partner_id
+        values.partner_id = context.default_partner_id =  partner_id
     carrier_xmlid = values.pop('carrier_xmlid', None)
     if carrier_xmlid not in (None, ):
         records = OE.res_partner.search_read(fields=['id'], domain=[('module','=',module['carrier']),('xml_id','=',carrier_xmlid)])
@@ -119,7 +120,7 @@ def update_order(values):
         values.login_id = records[0]['id']
     if not order:
         try:
-            OE.fnx_shipping.create(dict(values))
+            OE.fnx_shipping.create(dict(values), context=dict(context))
         except Exception, exc:
             print(exc.faultCode)
             print
