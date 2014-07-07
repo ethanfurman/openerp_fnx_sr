@@ -122,7 +122,7 @@ def update_order(values):
         try:
             OE.fnx_shipping.create(dict(values), context=dict(context))
         except Exception, exc:
-            print(exc.faultCode)
+            print(exc)
             print
     else:
         try:
