@@ -267,6 +267,24 @@ def manual_update(hostname='localhost', db=DB, login=USER, password=PW, **values
 
 
 @Command(
+        hostname=('host where OpenERP instance is running', ),
+        db=('database to use', ),
+        login=('login name to use', ),
+        password=('password for login name', ),
+        )
+def missing_check(hostname='localhost', db=DB, login=USER, password=PW):
+    connect_oe(hostname, db, login, password)
+    orders = dict(
+            (item.local_source_document, item)
+            for item in OE.fnx_shipping.search_read(fields=['id', 'local_source_document', 'partner_id'])
+            ])
+    processed = [name.split('_')[0] for name in ARCHIVE.listdir()]
+    for order in processed:
+        if order not in orders:
+            print order
+
+
+@Command(
         file_to_process=('order to add/update in system', ),
         hostname=('host where OpenERP instance is running', ),
         db=('database to use', ),
