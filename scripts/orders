@@ -295,8 +295,10 @@ def update(file_to_process='', hostname='localhost', db=DB, login=USER, password
                 dest = ERRORS
             except (IOError, ), exc:
                 failing.append('%s: %s' % (file, exc.message or exc.args))
+                dest = None
                 continue
-            archive(file, dest)
+            if dest:
+                archive(file, dest)
     if failed:
         raise Exception("Unable to process orders:\n\t%s" % '\n\t'.join(failed))
 
