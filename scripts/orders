@@ -295,28 +295,35 @@ def missing_check(hostname='localhost', db=DB, login=USER, password=PW):
         )
 def missing_reprocess(date, hostname='localhost', db=DB, login=USER, password=PW):
     connect_oe(hostname, db, login, password)
+    print 'gathering orders from OpenERP...',
     orders = dict(
             (item.local_source_document, item)
             for item in get_records(OE.fnx_shipping, fields=['id', 'local_source_document', 'partner_id'])
             )
+    print '(%d found)' % len(orders)
+    print 'gathering unprocessed orders from %s till today...' % date,
     processed_ids = dict(
             (name.split('_')[0], name)
-            for name in ARCHIVE.glob()
-            if name.stat().st_ctime >= date
+            for name in (ARCHIVE/'*').glob()
+            if Date.fromtimestamp(name.stat().st_ctime) >= date
             )
+    print '(%d found)' % len(processed_ids)
     for order_id, order_file in sorted(processed_ids.items()):
         if order_id not in orders:
+            print 're-adding order', order_id
             order = get_order(order_file)
             update_order(order)
-            order_file_date = order_file.stat().st_ctime
+            order_file_timestamp = order_file.stat().st_ctime
             error_updates = sorted([
                     name
                     for name in (ERRORS/order_id+'*').glob()
-                    if name.stat().st_ctime >order_file_date
+                    if name.stat().st_ctime > order_file_timestamp
                     ])
             for err_update in error_updates:
+                print 're-adding error', err_update
                 order = get_order(err_update)
                 update_order(order)
+            print
 
 
 @Command(
@@ -357,7 +364,7 @@ def update(file_to_process='', hostname='localhost', db=DB, login=USER, password
 
 if __name__ == '__main__':
     try:
-        lock = PidLockFile('/var/run/fnxsr-order_update.pid')
+        lock = PidLockFile('/var/run/fnxsr-order_update.pid', time_out=30)
         with lock:
             Run()
     except AlreadyLocked:
