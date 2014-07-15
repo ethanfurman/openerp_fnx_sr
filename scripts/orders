@@ -7,6 +7,7 @@ from VSS import Date
 from VSS.path import Path, listdir, glob
 from VSS.time_machine import PropertyDict
 from VSS.utils import ProgressBar, Enum, IntEnum, AutoEnum
+from VSS.openerp import get_records
 import openerplib
 import shutil
 import time
@@ -276,12 +277,13 @@ def missing_check(hostname='localhost', db=DB, login=USER, password=PW):
     connect_oe(hostname, db, login, password)
     orders = dict(
             (item.local_source_document, item)
-            for item in OE.fnx_shipping.search_read(fields=['id', 'local_source_document', 'partner_id'])
-            ])
+            for item in get_records(OE.fnx_shipping, fields=['id', 'local_source_document', 'partner_id'])
+            )
     processed = [name.split('_')[0] for name in ARCHIVE.listdir()]
     for order in processed:
         if order not in orders:
-            print order
+            print order,
+    print
 
 
 @Command(
