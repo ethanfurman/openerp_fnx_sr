@@ -10,6 +10,7 @@ from VSS.utils import ProgressBar, Enum, IntEnum, AutoEnum
 from VSS.openerp import get_records
 import openerplib
 import shutil
+import socket
 import time
 
 SOURCE = Path('/var/fis/')
@@ -355,7 +356,13 @@ def update(file_to_process='', hostname='localhost', db=DB, login=USER, password
         except AlreadyLocked:
             raise SystemExit
         files = get_files()
-    connect_oe(hostname, db, login, password)
+    for _ in range(30):
+        # keep trying to get a connection for 30 minutes
+        try:
+            connect_oe(hostname, db, login, password)
+            break
+        except socket.error:
+            time.sleep(60)
     try:
         retry = []
         failed = []
