@@ -331,7 +331,7 @@ class fnx_sr_shipping(osv.Model):
                 'state':'checked_in',
                 'check_in': current.check_in or DateTime.now(),
                 }
-        body = 'Driver checked in at %s' % values['check_in']
+        body = 'Driver checked in'
         if override:
             values['check_out'] = False
             body = 'Reset to Driver checked in.'
@@ -359,7 +359,7 @@ class fnx_sr_shipping(osv.Model):
         values = {'state':'complete'}
         if not order_update:
             values['check_out'] = DateTime.now()
-            body = 'Driver checked out at %s' % values['check_out']
+            body = 'Driver checked out'
         for id in ids:
             current = self.browse(cr, uid, id, context=context)
             if override:
