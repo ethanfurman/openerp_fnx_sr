@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from pandaemonium import PidLockFile, AlreadyLocked
-from scription import Script, Command, Run, mail, REQUIRED, OPTION, MULTI
+from scription import Script, Command, Main, mail, REQUIRED, OPTION, MULTI
 from syslog import syslog
 from VSS import Date, DateTime
 from VSS.path import Path
@@ -434,5 +434,4 @@ def reprocess(file_to_process, date, hostname='localhost', db=DB, login=USER, pa
     if failed:
         raise Exception("Unable to re-process orders:\n\t%s" % '\n\t'.join(failed))
 
-if __name__ == '__main__':
-    Run()
+Main()
