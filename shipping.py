@@ -26,7 +26,8 @@ class fnx_sr_shipping(osv.Model):
     _name = 'fnx.sr.shipping'
     _description = 'shipping & receiving'
     _inherit = ['mail.thread']
-    _inherits = {'res.partner':'partner_id'}
+    _inherits = {}
+    _mirrors = {'partner_id': ['warehouse_comment']}
     _order = 'appointment_date asc, appointment_time asc, state desc'
     _rec_name = 'name'
     _mail_flat_thread = False
@@ -34,7 +35,7 @@ class fnx_sr_shipping(osv.Model):
     def _document_name_get(self, cr, uid, ids, _field, _arg, context=None):
         result = {}
         for record in self.browse(cr, uid, ids, context=context):
-            result[record.id] = {'incoming':'PO ', 'outgoing':'Inv '}[record.direction] + record.local_source_document
+            result[record.id] = {'incoming':'PO ', 'outgoing':'Inv '}.get(record.direction, '') + record.local_source_document
         return result
 
     def _calc_appointment(self, cr, uid, ids, _field=None, _arg=None, context=None):
@@ -83,14 +84,14 @@ class fnx_sr_shipping(osv.Model):
     _columns = {
 
         'name': fields.function(_document_name_get, type='char', string='Document', store=True),
-        'direction': fields.selection([('incoming', 'Receiving'), ('outgoing', 'Shipping')], "Type of shipment", required=True),
+        'direction': fields.selection([('incoming', 'Receiving'), ('outgoing', 'Shipping')], "Type of shipment", required=False),
         'local_contact_id': fields.many2one('res.partner', string='Local employee', ondelete='restrict'),
         'job_title': fields.selection([('sales', 'Sales Rep:'), ('purchasing', 'Purchaser:')], 'Job Title'),
         'preposition': fields.selection([('sales', 'to '), ('purchasing', 'from ')], 'Type of order'),
         'local_source_document': fields.char('Our document', size=32),
         'partner_source_document_type': fields.selection([('sales', 'Purchase Order:'), ('purchasing', 'Sales Order:')], 'Type of order'),
         'partner_source_document': fields.char('Their document', size=32),
-        'partner_id': fields.many2one('res.partner', 'Partner', required=True, ondelete='restrict'),
+        'partner_id': fields.many2one('res.partner', 'Partner', required=False, ondelete='restrict'),
 
         'weight': fields.float('Weight'),
         'cartons': fields.integer('# of cartons'),
@@ -136,37 +137,46 @@ class fnx_sr_shipping(osv.Model):
         res_users = self.pool.get('res.users')
         if 'carrier_id' not in values or not values['carrier_id']:
             values['carrier_id'] = res_partner.search(cr, uid, [('xml_id','=','99'),('module','=','F27')])[0]
-        if 'partner_id' not in values or not values['partner_id']:
-            raise ValueError('partner not specified')
         context['mail_create_nolog'] = True
         context['mail_create_nosubscribe'] = True
-        partner = res_partner.browse(cr, uid, values['partner_id'])
-        # partner_follower_ids dance is so we don't include Administrator
-        partner_follower_ids = [p.id for p in partner.message_follower_ids]
-        user_follower_ids = res_users.search(cr, uid, [('partner_id','in',partner_follower_ids),('id','!=',1)])
-        user_follower_records = res_users.browse(cr, uid, user_follower_ids)
-        partner_follower_ids = [u.partner_id.id for u in user_follower_records]
+        partner_id = values.get('partner_id')
+        partner_follower_ids = []
+        user_follower_ids = []
+        if partner_id is not None:
+            partner = res_partner.browse(cr, uid, values['partner_id'])
+            # partner_follower_ids dance is so we don't include Administrator
+            partner_follower_ids = [p.id for p in partner.message_follower_ids]
+            user_follower_ids = res_users.search(cr, uid, [('partner_id','in',partner_follower_ids),('id','!=',1)])
+            user_follower_records = res_users.browse(cr, uid, user_follower_ids)
+            partner_follower_ids = [u.partner_id.id for u in user_follower_records]
         real_id = values.pop('login_id', None)
         real_name = None
-        direction = DIRECTION[values['direction']].title()
-        body = '%s order %s %s created' % (
-                direction,
-                ('to', 'from')[direction=='sale'],
-                partner.name,
-                )
+        direction = values.get('direction')
+        if direction is None or partner_id is None:
+            body = 'Order created.'
+        else:
+            direction = DIRECTION[direction].title()
+            body = '%s order %s %s created.' % (
+                    direction,
+                    ('to', 'from')[direction=='sale'],
+                    partner.name,
+                    )
         follower_ids = values.pop('local_contact_ids', [])
         follower_ids.extend(user_follower_ids)
         if real_id:
             values['local_contact_id'] = real_id #res_users.browse(cr, uid, real_id, context=context)
             follower_ids.append(real_id)
             real_name = res_users.browse(cr, uid, real_id, context=context).partner_id.name
-            body = '%s submitted %s order %s %s %s' % (
-                    real_name,
-                    direction,
-                    local_source_document,
-                    ('to', 'for')[direction=='sale'],
-                    partner.name,
-                    )
+            if direction is None or partner_id is None:
+                body = '%s submitted order.' % real_name
+            else:
+                body = '%s submitted %s order %s %s %s' % (
+                        real_name,
+                        direction,
+                        local_source_document,
+                        ('to', 'for')[direction=='sale'],
+                        partner.name,
+                        )
         if 'appointment_date' in values:
             try:
                 appt = Date.fromymd(values['appointment_date'])

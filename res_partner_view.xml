@@ -8,7 +8,7 @@
                 <field eval="18" name="priority"/>
                 <field name="arch" type="xml">
                     <page name="page_history" position="before">
-                        <page string="Shipments">
+                        <page string="Shipments" visible="groups('fnx_sr.group_fnx_sr_guest')">
                             <field name="fnxsr_shipped"
                                    nolabel="1"
                                    attrs="{'invisible': [('customer','=',False),('supplier','=',False)]}"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from pandaemonium import PidLockFile, AlreadyLocked
-from scription import Script, Command, Run, mail, REQUIRED, OPTION, MULTI
+from scription import Script, Command, Main, OrmFile, mail, REQUIRED, OPTION, MULTI
 from syslog import syslog
 from VSS import Date, DateTime
 from VSS.path import Path
@@ -16,9 +16,21 @@ import time
 SOURCE = Path('/var/fis/')
 ARCHIVE = Path('/var/openerp/archive/shipping/')
 ERRORS = Path('/var/openerp/archive/shipping/error')
-USER_PW_DB = Path('/etc/openerp/credentials')
+CONFIG = Path('/etc/openerp/fnx.ini')
 
-execfile(USER_PW_DB)
+try:
+    settings = OrmFile(CONFIG, section='openerp')
+except Exception:
+    print('WARNING: unable to process configfile; all parameters must be specified')
+    HOST = ''
+    USER = ''
+    DB = ''
+    PW = ''
+else:
+    HOST = settings.host
+    USER = settings.user
+    DB = settings.db
+    PW = settings.pw
 
 OE = PropertyDict()
 
@@ -105,9 +117,7 @@ def update_order(values):
     order = None
     for order in orders:
         break
-    if not order and not direction:
-        raise BadFormat('cannot create new document %r without a direction' % values.local_source_document)
-    elif not order:
+    if not order and not values.get('state'):
         values.state = 'draft'
     elif 'pallets' in values and values.pallets:
         if order['state'] in ('checked_in', 'complete', 'cancelled'):
@@ -368,8 +378,10 @@ def update(file_to_process, hostname='localhost', db=DB, login=USER, password=PW
             lock = PidLockFile('/var/run/fnxsr-order_update.pid', time_out=30)
             lock.seal()
         except AlreadyLocked:
-            raise SystemExit
+            return
         files = get_files()
+        if not files:
+            return
     for _ in range(30):
         # keep trying to get a connection for 30 minutes
         try:
@@ -434,5 +446,4 @@ def reprocess(file_to_process, date, hostname='localhost', db=DB, login=USER, pa
     if failed:
         raise Exception("Unable to re-process orders:\n\t%s" % '\n\t'.join(failed))
 
-if __name__ == '__main__':
-    Run()
+Main()

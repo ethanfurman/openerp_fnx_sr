@@ -95,7 +95,7 @@
                         </group>
                         <notebook>
                             <page string="Warehouse Comments">
-                                <field name="warehouse_comment" nolabel="1" attrs="{'readonly':True}"/>
+                                <field name="partner_id.warehouse_comment" nolabel="1" attrs="{'readonly':True}"/>
                             </page>
                             <page string="Order Comments">
                                 <field name="comment"/>
