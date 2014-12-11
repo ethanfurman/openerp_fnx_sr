@@ -133,6 +133,8 @@ class fnx_sr_shipping(osv.Model):
     def create(self, cr, uid, values, context=None):
         if context == None:
             context = {}
+        if 'state' in values:
+            values['state'] = values['state'].lower()
         res_partner = self.pool.get('res.partner')
         res_users = self.pool.get('res.users')
         if 'carrier_id' not in values or not values['carrier_id']:
@@ -198,6 +200,8 @@ class fnx_sr_shipping(osv.Model):
             context = {}
         context['mail_create_nolog'] = True
         context['mail_create_nosubscribe'] = True
+        if 'state' in values:
+            values['state'] = values['state'].lower()
         state = None
         follower_ids = values.pop('local_contact_ids', [])
         login_id = values.pop('login_id', None)
