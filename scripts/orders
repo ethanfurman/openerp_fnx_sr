@@ -32,6 +32,309 @@ else:
     DB = settings.db
     PW = settings.pw
 
+@Script(
+        host=('host where OpenERP instance is running', OPTION),
+        db=('database to use', OPTION),
+        user=('login name to use', OPTION),
+        pw=('password for login name', OPTION),
+        )
+def main(host, db, user, pw):
+    if host:
+        module.HOST = host
+    if db:
+        module.DB = db
+    if user:
+        module.USER = user
+    if pw:
+        module.PW = pw
+    for req in ('HOST', 'USER', 'DB', 'PW'):
+        if not module[req]:
+            raise SystemExit('%r required; use --help for more info' % req)
+
+@Command(
+        remove=('remove identical duplicates', 'flag', ),
+        )
+def find_duplicates(remove=False):
+    """Look for duplicate orders; print any found"""
+    connect_oe(HOST, DB, USER, PW)
+    records = OE.fnx_shipping.search_read(fields=['id', 'local_source_document'], )
+    order_numbers = set()
+    duplicates = list()
+    removed = list()
+    removed_ids = list()
+    pb = ProgressBar(len(records), message="processing %d records" % len(records))
+    for sr in records:
+        pb.tick()
+        sr = PropertyDict(sr)
+        if sr.local_source_document in order_numbers:
+            duplicates.append(sr.local_source_document)
+        else:
+            order_numbers.add(sr.local_source_document)
+    if not duplicates:
+        print '\nNo duplicates found.\n'
+    else:
+        print '\n%d duplicates found in %d orders:\n' % (len(duplicates), len(records))
+        if remove:
+            pb = ProgressBar(len(duplicates), message='checking %d records' % len(duplicates))
+            for dup in duplicates:
+                pb.tick()
+                dups = OE.fnx_shipping.search_read(domain=[('local_source_document','=',dup)])
+                if len(dups) > 2:
+                    continue
+                d0 = PropertyDict(dups[0])
+                d1 = PropertyDict(dups[1])
+                d0_state = OrderState[d0.state]
+                d1_state = OrderState[d1.state]
+                d0_msgs = len(d0.message_ids)
+                d1_msgs = len(d1.message_ids)
+                if ( ( d0_state != complete and d1_state == complete)
+                  or ( d0_state == complete and d1_state != complete)
+                  ):
+                    removed.append(d0.local_source_document)
+                    removed_ids.append(d0.id)
+                elif d0_state > d1_state:
+                    removed.append(d1.local_source_document)
+                    removed_ids.append(d1.id)
+                elif d1_state > d0_state:
+                    removed.append(d0.local_source_document)
+                    removed_ids.append(d0.id)
+                elif d0_msgs > d1_msgs:
+                    removed.append(d1.local_source_document)
+                    removed_ids.append(d1.id)
+                elif d1_msgs > d0_msgs:
+                    removed.append(d0.local_source_document)
+                    removed_ids.append(d0.id)
+                else:
+                    d0_id = d0.pop('id')
+                    d1_id = d1.pop('id')
+                    d0.pop('message_ids')
+                    d1.pop('message_ids')
+                    if d0 == d1:
+                        removed.append(d1.local_source_document)
+                        removed_ids.append(d1_id)
+            if removed:
+                duplicates = [lsd for lsd in duplicates if lsd not in removed]
+                OE.fnx_shipping.unlink(removed_ids)
+                print '\n'
+            for r in removed:
+                print '\t', r
+            print '\n\nremaining...'
+        for dup in sorted(duplicates):
+            print '\t', dup
+
+
+@Command()
+def fix_carriers():
+    """
+    compare OE values for carrier with values in files -- if OE value is '99'
+    and file value is not, set to file value
+    """
+    connect_oe(HOST, DB, USER, PW)
+    records = OE.res_partner.search_read(fields=['id'], domain=[('module','=',fis_module['carrier']),('xml_id','=','99')])
+    unknown_id = records[0]['id']
+    records = OE.res_partner.search_read(fields=['id','xml_id'], domain=[('module','=',fis_module['carrier'])])
+    shippers = {}
+    for rec in records:
+        shippers[rec['xml_id']] = rec['id']
+    shipping_records = OE.fnx_shipping.search_read(
+            fields=['id','carrier_id','local_source_document'],
+            domain=['|',('carrier_id.id','=',unknown_id),('carrier_id','=',False)])
+    pb = ProgressBar(len(shipping_records), message="processing %d records" % len(shipping_records))
+    for sr in shipping_records:
+        pb.tick()
+        sr = PropertyDict(sr)
+        source_files = sorted((ARCHIVE / sr.local_source_document + '*').glob())
+        order = PropertyDict()
+        for sf in source_files:
+            settings = get_order(sf)
+            order.update(settings)
+        carrier_xmlid = order.get('carrier_xmlid')
+        if carrier_xmlid in shippers:
+            carrier_id = shippers[carrier_xmlid]
+            values = {'carrier_id':carrier_id}
+            OE.fnx_shipping.write([sr.id], values)
+
+
+@Command(
+        values=('settings to use', ),
+        )
+def manual_update(**values):
+    connect_oe(HOST, DB, USER, PW)
+    update_order(PropertyDict(values))
+
+
+@Command()
+def missing_check():
+    connect_oe(HOST, DB, USER, PW)
+    orders = dict(
+            (item.local_source_document, item)
+            for item in get_records(OE.fnx_shipping, fields=['id', 'local_source_document', 'partner_id'])
+            )
+    processed = [name.split('_')[0] for name in ARCHIVE.listdir()]
+    for order in processed:
+        if order not in orders:
+            print order,
+    print
+
+
+@Command(
+        file_to_process=('order to add/update in system', MULTI, 'f', Path, ),
+        date=('reprocess all files from <date>', MULTI, 'd', Date, ),
+        )
+def reprocess(file_to_process, date):
+    if not (file_to_process or date):
+        raise SystemExit('either file(s) or date(s) must be specified')
+    if file_to_process:
+        files = [ARCHIVE/f for f in file_to_process]
+    else:
+        files = [
+                f
+                for f in get_files(ARCHIVE)
+                if DateTime.fromtimestamp(f.stat().st_mtime).date() in date
+                ]
+    failed = []
+    for file in files:
+        try:
+            order = get_order(file)
+            update_order(order)
+        except Exception, exc:
+            failed.append((str(exc), file))
+    if failed:
+        raise Exception("Unable to re-process orders:\n\t%s" % '\n\t'.join(failed))
+
+@Command()
+def reprocess_error():
+    """
+    goes through the errors directory and reprocesses any orders that are
+    either missing or still open
+    """
+    connect_oe(HOST, DB, USER, PW)
+    print('gathering orders from OpenERP...')
+    orders = dict(
+            (item.local_source_document, item)
+            for item in get_records(OE.fnx_shipping, fields=['id', 'local_source_document', 'partner_id', 'state'])
+            )
+    candidates = ERRORS.glob('*')
+    candidates.sort(key=lambda c: c.stat().st_ctime)
+    for mishap in candidates:
+        try:
+            order = get_order(mishap)
+        except BadFormat:
+            continue
+        oe_order = orders.get(order.local_source_document)
+        if order.local_source_document[0].isalpha():
+            # weird stuff, skip it
+            continue
+        if oe_order is not None and oe_order.state in ('complete', 'cancelled'):
+            # it's closed, don't sweat it
+            continue
+        print('updating %s' % order.local_source_document)
+        try:
+            update_order(order)
+        except MissingPartner:
+            continue
+
+
+@Command(
+        date=('start date for missing orders', REQUIRED, 'd', Date),
+        )
+def reprocess_missing(date):
+    connect_oe(HOST, DB, USER, PW)
+    print 'gathering orders from OpenERP...',
+    orders = dict(
+            (item.local_source_document, item)
+            for item in get_records(OE.fnx_shipping, fields=['id', 'local_source_document', 'partner_id'])
+            )
+    print '(%d found)' % len(orders), orders.keys()[:10]
+    print 'gathering all orders from %s till today...' % date,
+    processed_ids = dict(
+            (name.filename.split('_')[0], name)
+            for name in (ARCHIVE/'*').glob()
+            if Date.fromtimestamp(name.stat().st_ctime) >= date and not name.endswith('/error')
+            )
+    print '(%d found)' % len(processed_ids), processed_ids.keys()[:10]
+    lock = PidLockFile('/var/run/fnxsr-order_update.pid', time_out=300)
+    lock.seal()
+    i = 0
+    for order_id, order_file in sorted(processed_ids.items()):
+        if order_id not in orders:
+            print 're-adding order', order_id
+            i += 1
+            order = get_order(order_file)
+            update_order(order)
+            order_file_timestamp = order_file.stat().st_ctime
+            error_updates = sorted([
+                    name
+                    for name in (ERRORS/order_id+'*').glob()
+                    if name.stat().st_ctime > order_file_timestamp
+                    ])
+            for err_update in error_updates:
+                print 're-adding error', err_update
+                order = get_order(err_update)
+                update_order(order)
+            print
+            if i % 10:
+                lock.release()
+                print 'letting system get a word in edgewise...'
+                time.sleep(90)
+                lock.seal()
+                print 'okay, processing some more'
+    lock.release()
+
+
+@Command(
+        file_to_process=('order to add/update in system', OPTION, ),
+        )
+def update(file_to_process):
+    if file_to_process:
+        files = [file_to_process]
+        lock = None
+    else:
+        try:
+            lock = PidLockFile('/var/run/fnxsr-order_update.pid', time_out=30)
+            lock.seal()
+        except AlreadyLocked:
+            return
+        files = get_files()
+        if not files:
+            return
+    for _ in range(30):
+        # keep trying to get a connection for 30 minutes
+        try:
+            connect_oe(HOST, DB, USER, PW)
+            break
+        except socket.error:
+            time.sleep(60)
+    try:
+        retry = []
+        failed = []
+        for group in ((files, failed), ):
+            time.sleep(5)
+            trying, failing = group
+            for file in trying:
+                try:
+                    order = get_order(file)
+                    if order.local_source_document[0].isalpha():
+                        dest = ERRORS
+                    else:
+                        update_order(order)
+                        dest = ARCHIVE
+                except (BadFormat, MissingPartner, ), exc:
+                    failing.append('%s: %s' % (file, exc.message or exc.args))
+                    dest = ERRORS
+                except (IOError, ), exc:
+                    failing.append('%s: %s' % (file, exc.message or exc.args))
+                    dest = None
+                    continue
+                if dest:
+                    archive(file, dest)
+        if failed:
+            raise Exception("Unable to process orders:\n\t%s" % '\n\t'.join(failed))
+    finally:
+        if lock:
+            lock.release()
+
+
 OE = PropertyDict()
 
 fis_module = {
@@ -71,7 +374,10 @@ def archive(src_file, dest=ARCHIVE):
 
 def get_order(order):
     g = {}
-    execfile(order, g)
+    try:
+        execfile(order, g)
+    except SyntaxError, exc:
+        raise BadFormat(str(exc))
     if 'order' not in g:
         raise BadFormat('empty file?')
     return PropertyDict(g['order'])
@@ -153,297 +459,5 @@ def connect_oe(hostname, database, user, password):
     OE.res_partner = conn.get_model('res.partner')
     OE.res_users = conn.get_model('res.users')
     OE.fnx_shipping = conn.get_model('fnx.sr.shipping')
-
-
-@Command(
-        remove=('remove identical duplicates', 'flag', ),
-        hostname=('host where OpenERP instance is running', ),
-        db=('database to use', ),
-        login=('login name to use', ),
-        password=('password for login name', ),
-        )
-def find_duplicates(hostname='localhost', db=DB, login=USER, password=None, remove=False):
-    """Look for duplicate orders; print any found"""
-    if password is None:
-        password = PW
-    connect_oe(hostname, db, login, password)
-    records = OE.fnx_shipping.search_read(fields=['id', 'local_source_document'], )
-    order_numbers = set()
-    duplicates = list()
-    removed = list()
-    removed_ids = list()
-    pb = ProgressBar(len(records), message="processing %d records" % len(records))
-    for sr in records:
-        pb.tick()
-        sr = PropertyDict(sr)
-        if sr.local_source_document in order_numbers:
-            duplicates.append(sr.local_source_document)
-        else:
-            order_numbers.add(sr.local_source_document)
-    if not duplicates:
-        print '\nNo duplicates found.\n'
-    else:
-        print '\n%d duplicates found in %d orders:\n' % (len(duplicates), len(records))
-        if remove:
-            pb = ProgressBar(len(duplicates), message='checking %d records' % len(duplicates))
-            for dup in duplicates:
-                pb.tick()
-                dups = OE.fnx_shipping.search_read(domain=[('local_source_document','=',dup)])
-                if len(dups) > 2:
-                    continue
-                d0 = PropertyDict(dups[0])
-                d1 = PropertyDict(dups[1])
-                d0_state = OrderState[d0.state]
-                d1_state = OrderState[d1.state]
-                d0_msgs = len(d0.message_ids)
-                d1_msgs = len(d1.message_ids)
-                if ( ( d0_state != complete and d1_state == complete)
-                  or ( d0_state == complete and d1_state != complete)
-                  ):
-                    removed.append(d0.local_source_document)
-                    removed_ids.append(d0.id)
-                elif d0_state > d1_state:
-                    removed.append(d1.local_source_document)
-                    removed_ids.append(d1.id)
-                elif d1_state > d0_state:
-                    removed.append(d0.local_source_document)
-                    removed_ids.append(d0.id)
-                elif d0_msgs > d1_msgs:
-                    removed.append(d1.local_source_document)
-                    removed_ids.append(d1.id)
-                elif d1_msgs > d0_msgs:
-                    removed.append(d0.local_source_document)
-                    removed_ids.append(d0.id)
-                else:
-                    d0_id = d0.pop('id')
-                    d1_id = d1.pop('id')
-                    d0.pop('message_ids')
-                    d1.pop('message_ids')
-                    if d0 == d1:
-                        removed.append(d1.local_source_document)
-                        removed_ids.append(d1_id)
-            if removed:
-                duplicates = [lsd for lsd in duplicates if lsd not in removed]
-                OE.fnx_shipping.unlink(removed_ids)
-                print '\n'
-            for r in removed:
-                print '\t', r
-            print '\n\nremaining...'
-        for dup in sorted(duplicates):
-            print '\t', dup
-
-
-@Command(
-        hostname=('host where OpenERP instance is running', ),
-        db=('database to use', ),
-        login=('login name to use', ),
-        password=('password for login name', ),
-        )
-def fix_carriers(hostname='localhost', db=DB, login=USER, password=PW):
-    """
-    compare OE values for carrier with values in files -- if OE value is '99'
-    and file value is not, set to file value
-    """
-    if password is None:
-        password = PW
-    connect_oe(hostname, db, login, password)
-    records = OE.res_partner.search_read(fields=['id'], domain=[('module','=',fis_module['carrier']),('xml_id','=','99')])
-    unknown_id = records[0]['id']
-    records = OE.res_partner.search_read(fields=['id','xml_id'], domain=[('module','=',fis_module['carrier'])])
-    shippers = {}
-    for rec in records:
-        shippers[rec['xml_id']] = rec['id']
-    shipping_records = OE.fnx_shipping.search_read(
-            fields=['id','carrier_id','local_source_document'],
-            domain=['|',('carrier_id.id','=',unknown_id),('carrier_id','=',False)])
-    pb = ProgressBar(len(shipping_records), message="processing %d records" % len(shipping_records))
-    for sr in shipping_records:
-        pb.tick()
-        sr = PropertyDict(sr)
-        source_files = sorted((ARCHIVE / sr.local_source_document + '*').glob())
-        order = PropertyDict()
-        for sf in source_files:
-            settings = get_order(sf)
-            order.update(settings)
-        carrier_xmlid = order.get('carrier_xmlid')
-        if carrier_xmlid in shippers:
-            carrier_id = shippers[carrier_xmlid]
-            values = {'carrier_id':carrier_id}
-            OE.fnx_shipping.write([sr.id], values)
-
-
-@Command(
-        values=('settings to use', ),
-        hostname=('host where OpenERP instance is running', ),
-        db=('database to use', ),
-        login=('login name to use', ),
-        password=('password for login name', ),
-        )
-def manual_update(hostname='localhost', db=DB, login=USER, password=None, **values):
-    if password is None:
-        password = PW
-    connect_oe(hostname, db, login, password)
-    update_order(PropertyDict(values))
-
-
-@Command(
-        hostname=('host where OpenERP instance is running', ),
-        db=('database to use', ),
-        login=('login name to use', ),
-        password=('password for login name', ),
-        )
-def missing_check(hostname='localhost', db=DB, login=USER, password=PW):
-    if password is None:
-        password = PW
-    connect_oe(hostname, db, login, password)
-    orders = dict(
-            (item.local_source_document, item)
-            for item in get_records(OE.fnx_shipping, fields=['id', 'local_source_document', 'partner_id'])
-            )
-    processed = [name.split('_')[0] for name in ARCHIVE.listdir()]
-    for order in processed:
-        if order not in orders:
-            print order,
-    print
-
-
-@Command(
-        date=('start date for missing orders', REQUIRED, 'd', Date),
-        hostname=('host where OpenERP instance is running', ),
-        db=('database to use', ),
-        login=('login name to use', ),
-        password=('password for login name', ),
-        )
-def missing_reprocess(date, hostname='localhost', db=DB, login=USER, password=PW):
-    if password is None:
-        password = PW
-    connect_oe(hostname, db, login, password)
-    print 'gathering orders from OpenERP...',
-    orders = dict(
-            (item.local_source_document, item)
-            for item in get_records(OE.fnx_shipping, fields=['id', 'local_source_document', 'partner_id'])
-            )
-    print '(%d found)' % len(orders), orders.keys()[:10]
-    print 'gathering all orders from %s till today...' % date,
-    processed_ids = dict(
-            (name.filename.split('_')[0], name)
-            for name in (ARCHIVE/'*').glob()
-            if Date.fromtimestamp(name.stat().st_ctime) >= date and not name.endswith('/error')
-            )
-    print '(%d found)' % len(processed_ids), processed_ids.keys()[:10]
-    lock = PidLockFile('/var/run/fnxsr-order_update.pid', time_out=300)
-    lock.seal()
-    i = 0
-    for order_id, order_file in sorted(processed_ids.items()):
-        if order_id not in orders:
-            print 're-adding order', order_id
-            i += 1
-            order = get_order(order_file)
-            update_order(order)
-            order_file_timestamp = order_file.stat().st_ctime
-            error_updates = sorted([
-                    name
-                    for name in (ERRORS/order_id+'*').glob()
-                    if name.stat().st_ctime > order_file_timestamp
-                    ])
-            for err_update in error_updates:
-                print 're-adding error', err_update
-                order = get_order(err_update)
-                update_order(order)
-            print
-            if i % 10:
-                lock.release()
-                print 'letting system get a word in edgewise...'
-                time.sleep(90)
-                lock.seal()
-                print 'okay, processing some more'
-    lock.release()
-
-
-@Command(
-        file_to_process=('order to add/update in system', OPTION, ),
-        hostname=('host where OpenERP instance is running', ),
-        db=('database to use', ),
-        login=('login name to use', ),
-        password=('password for login name', ),
-        )
-def update(file_to_process, hostname='localhost', db=DB, login=USER, password=PW):
-    if password is None:
-        password = PW
-    if file_to_process:
-        files = [file_to_process]
-        lock = None
-    else:
-        try:
-            lock = PidLockFile('/var/run/fnxsr-order_update.pid', time_out=30)
-            lock.seal()
-        except AlreadyLocked:
-            return
-        files = get_files()
-        if not files:
-            return
-    for _ in range(30):
-        # keep trying to get a connection for 30 minutes
-        try:
-            connect_oe(hostname, db, login, password)
-            break
-        except socket.error:
-            time.sleep(60)
-    try:
-        retry = []
-        failed = []
-        for group in ((files, failed), ):
-            time.sleep(5)
-            trying, failing = group
-            for file in trying:
-                try:
-                    order = get_order(file)
-                    update_order(order)
-                    dest = ARCHIVE
-                except (BadFormat, MissingPartner, ), exc:
-                    failing.append('%s: %s' % (file, exc.message or exc.args))
-                    dest = ERRORS
-                except (IOError, ), exc:
-                    failing.append('%s: %s' % (file, exc.message or exc.args))
-                    dest = None
-                    continue
-                if dest:
-                    archive(file, dest)
-        if failed:
-            raise Exception("Unable to process orders:\n\t%s" % '\n\t'.join(failed))
-    finally:
-        if lock:
-            lock.release()
-
-@Command(
-        file_to_process=('order to add/update in system', MULTI, 'f', Path, ),
-        date=('reprocess all files from <date>', MULTI, 'd', Date, ),
-        hostname=('host where OpenERP instance is running', ),
-        db=('database to use', ),
-        login=('login name to use', ),
-        password=('password for login name', ),
-        )
-def reprocess(file_to_process, date, hostname='localhost', db=DB, login=USER, password=PW):
-    if password is None:
-        password = PW
-    if file_to_process is None and date is None:
-        raise Exception('either file(s) or date(s) must be specified')
-    if file_to_process:
-        files = [ARCHIVE/f for f in file_to_process]
-    else:
-        files = [
-                f
-                for f in get_files(ARCHIVE)
-                if DateTime.fromtimestamp(f.stat().st_mtime).date() in date
-                ]
-    failed = []
-    for file in files:
-        try:
-            order = get_order(file)
-            update_order(order)
-        except Exception, exc:
-            failed.append((str(exc), file))
-    if failed:
-        raise Exception("Unable to re-process orders:\n\t%s" % '\n\t'.join(failed))
 
 Main()
