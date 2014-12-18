@@ -283,20 +283,23 @@ def reprocess_missing(date):
 
 
 @Command(
-        file_to_process=('order to add/update in system', OPTION, ),
+        file=('order to add/update in system', OPTION, 'f', Path),
+        directory=('directory of orders to add/update in system', OPTION, 'd', Path),
         )
-def update(file_to_process):
-    if file_to_process:
-        files = [file_to_process]
+def update(file, directory=SOURCE):
+    if file:
+        files = [file]
         lock = None
     else:
         try:
             lock = PidLockFile('/var/run/fnxsr-order_update.pid', time_out=30)
             lock.seal()
         except AlreadyLocked:
+            lock.release()
             return
-        files = get_files()
+        files = get_files(directory)
         if not files:
+            lock.release()
             return
     for _ in range(30):
         # keep trying to get a connection for 30 minutes
@@ -305,6 +308,10 @@ def update(file_to_process):
             break
         except socket.error:
             time.sleep(60)
+    else:
+        if lock:
+            lock.release()
+        return
     try:
         retry = []
         failed = []
