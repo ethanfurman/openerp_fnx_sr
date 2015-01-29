@@ -432,14 +432,20 @@ def update_order(values):
         values.weight = float(values.weight) or False
     orders = OE.fnx_shipping.search_read(fields=['id', 'appt_confirmed', 'state'], domain=[('local_source_document','=',values.local_source_document)])
     order = None
+    existing_state = None
     for order in orders:
+        existing_state = order['state']
         break
-    if not order and not values.get('state'):
-        values.state = 'draft'
-    elif 'pallets' in values and values.pallets:
-        if order['state'] in ('checked_in', 'complete', 'cancelled'):
+    if not order:
+        if not direction:
+            raise BadFormat('cannot create new document %r without a direction' % values.local_source_document)
+        if not values.get('state'):
+            values.state = 'draft'
+        existing_state = values.state
+    if 'pallets' in values and values.pallets:
+        if existing_state in ('checked_in', 'complete', 'cancelled'):
             pass
-        elif order['state'] == 'scheduled':
+        elif existing_state == 'scheduled':
             values.state = 'ready'
         else:
             values.state = 'appt'
