@@ -12,6 +12,7 @@ import openerplib
 import shutil
 import socket
 import time
+import xmlrpclib
 
 SOURCE = Path('/var/fis/')
 ARCHIVE = Path('/var/openerp/archive/shipping/')
@@ -449,12 +450,16 @@ def update_order(values):
     if not order:
         try:
             OE.fnx_shipping.create(dict(values), context=dict(context))
+        except xmlrpclib.ProtocolError, exc:
+            raise BadFormat('Order %s: %s' % (order, (exc)))
         except Exception, exc:
             print(exc)
             raise
     else:
         try:
             OE.fnx_shipping.write([order['id']], dict(values))
+        except xmlrpclib.ProtocolError, exc:
+            raise BadFormat('Order %s: %s' % (order, (exc)))
         except Exception, exc:
             print(exc.faultCode)
             raise
