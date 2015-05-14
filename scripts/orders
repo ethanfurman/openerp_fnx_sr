@@ -1,18 +1,27 @@
 #!/usr/bin/env python
+from __future__ import print_function
 
 from pandaemonium import PidLockFile, AlreadyLocked
 from scription import Script, Command, Main, OrmFile, mail, REQUIRED, OPTION, MULTI
+from scription import *
 from syslog import syslog
 from VSS import Date, DateTime
 from VSS.path import Path
 from VSS.time_machine import PropertyDict
 from VSS.utils import ProgressBar, Enum, IntEnum, AutoEnum
 from VSS.openerp import get_records
+import logging
 import openerplib
 import shutil
 import socket
 import time
 import xmlrpclib
+
+logging.basicConfig(
+        filename='/var/log/openerp/fnx_sr',
+        level=logging.WARNING,
+        format='%(process)06d %(asctime)s %(name)-25s %(message)s',
+        )
 
 SOURCE = Path('/var/fis/')
 ARCHIVE = Path('/var/openerp/archive/shipping/')
@@ -22,7 +31,7 @@ CONFIG = Path('/etc/openerp/fnx.ini')
 try:
     settings = OrmFile(CONFIG, section='openerp')
 except Exception:
-    print('WARNING: unable to process configfile; all parameters must be specified')
+    print('WARNING: unable to process configfile; all parameters must be specified', verbose=0)
     HOST = ''
     USER = ''
     DB = ''
@@ -72,9 +81,9 @@ def find_duplicates(remove=False):
         else:
             order_numbers.add(sr.local_source_document)
     if not duplicates:
-        print '\nNo duplicates found.\n'
+        print('\nNo duplicates found.\n', verbose=0)
     else:
-        print '\n%d duplicates found in %d orders:\n' % (len(duplicates), len(records))
+        print('\n%d duplicates found in %d orders:\n' % (len(duplicates), len(records)), verbose=0)
         if remove:
             pb = ProgressBar(len(duplicates), message='checking %d records' % len(duplicates))
             for dup in duplicates:
@@ -116,12 +125,12 @@ def find_duplicates(remove=False):
             if removed:
                 duplicates = [lsd for lsd in duplicates if lsd not in removed]
                 OE.fnx_shipping.unlink(removed_ids)
-                print '\n'
+                print('\n', verbose=0)
             for r in removed:
-                print '\t', r
-            print '\n\nremaining...'
+                print('\t', r, verbose=0)
+            print('\n\nremaining...', verbose=0)
         for dup in sorted(duplicates):
-            print '\t', dup
+            print('\t', dup, verbose=0)
 
 
 @Command()
@@ -174,8 +183,8 @@ def missing_check():
     processed = [name.split('_')[0] for name in ARCHIVE.listdir()]
     for order in processed:
         if order not in orders:
-            print order,
-    print
+            print(order, verbose=0)
+    print(verbose=0)
 
 
 @Command(
@@ -241,25 +250,25 @@ def reprocess_error():
         )
 def reprocess_missing(date):
     connect_oe(HOST, DB, USER, PW)
-    print 'gathering orders from OpenERP...',
+    print('gathering orders from OpenERP...',)
     orders = dict(
             (item.local_source_document, item)
             for item in get_records(OE.fnx_shipping, fields=['id', 'local_source_document', 'partner_id'])
             )
-    print '(%d found)' % len(orders), orders.keys()[:10]
-    print 'gathering all orders from %s till today...' % date,
+    print('(%d found)' % len(orders), orders.keys()[:10])
+    print('gathering all orders from %s till today...' % date,)
     processed_ids = dict(
             (name.filename.split('_')[0], name)
             for name in (ARCHIVE/'*').glob()
             if Date.fromtimestamp(name.stat().st_ctime) >= date and not name.endswith('/error')
             )
-    print '(%d found)' % len(processed_ids), processed_ids.keys()[:10]
-    lock = PidLockFile('/var/run/fnxsr-order_update.pid', time_out=300)
+    print('(%d found)' % len(processed_ids), processed_ids.keys()[:10])
+    lock = PidLockFile('/var/run/fnxsr-order_update.pid', timeout=300)
     lock.seal()
     i = 0
     for order_id, order_file in sorted(processed_ids.items()):
         if order_id not in orders:
-            print 're-adding order', order_id
+            print('re-adding order', order_id)
             i += 1
             order = get_order(order_file)
             update_order(order)
@@ -270,16 +279,16 @@ def reprocess_missing(date):
                     if name.stat().st_ctime > order_file_timestamp
                     ])
             for err_update in error_updates:
-                print 're-adding error', err_update
+                print('re-adding error', err_update)
                 order = get_order(err_update)
                 update_order(order)
-            print
+            print()
             if i % 10:
                 lock.release()
-                print 'letting system get a word in edgewise...'
+                print('letting system get a word in edgewise...')
                 time.sleep(90)
                 lock.seal()
-                print 'okay, processing some more'
+                print('okay, processing some more')
     lock.release()
 
 
@@ -293,10 +302,9 @@ def update(file, directory=SOURCE):
         lock = None
     else:
         try:
-            lock = PidLockFile('/var/run/fnxsr-order_update.pid', time_out=30)
+            lock = PidLockFile('/var/run/fnxsr-order_update.pid', timeout=30)
             lock.seal()
         except AlreadyLocked:
-            lock.release()
             return
         files = get_files(directory)
         if not files:
@@ -316,6 +324,7 @@ def update(file, directory=SOURCE):
     try:
         retry = []
         failed = []
+        failures = False
         for group in ((files, failed), ):
             time.sleep(5)
             trying, failing = group
@@ -328,16 +337,21 @@ def update(file, directory=SOURCE):
                         update_order(order)
                         dest = ARCHIVE
                 except (BadFormat, MissingPartner, ), exc:
-                    failing.append('%s: %s' % (file, exc.message or exc.args))
+                    print('%s: %s' % (file, exc.message or exc.args), file=stderr)
+                    # failing.append('%s: %s' % (file, exc.message or exc.args))
                     dest = ERRORS
+                    failures = True
                 except (IOError, ), exc:
-                    failing.append('%s: %s' % (file, exc.message or exc.args))
+                    print('%s: %s' % (file, exc.message or exc.args), file=stderr)
+                    # failing.append('%s: %s' % (file, exc.message or exc.args))
                     dest = None
+                    failures = True
                     continue
                 if dest:
                     archive(file, dest)
-        if failed:
-            raise Exception("Unable to process orders:\n\t%s" % '\n\t'.join(failed))
+        if failures:
+            # raise Exception("Unable to process orders:\n\t%s" % '\n\t'.join(failed))
+            raise SystemExit(-1)
     finally:
         if lock:
             lock.release()
@@ -459,7 +473,7 @@ def update_order(values):
         except xmlrpclib.ProtocolError, exc:
             raise BadFormat('Order %s: %s' % (order, (exc)))
         except Exception, exc:
-            print(exc)
+            print(exc, file=stderr)
             raise
     else:
         try:
@@ -467,7 +481,7 @@ def update_order(values):
         except xmlrpclib.ProtocolError, exc:
             raise BadFormat('Order %s: %s' % (order, (exc)))
         except Exception, exc:
-            print(exc.faultCode)
+            print(exc.faultCode, file=stderr)
             raise
 
 def get_files(source=SOURCE):
