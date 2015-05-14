@@ -28,7 +28,7 @@ class fnx_sr_shipping(osv.Model):
     _inherit = ['mail.thread']
     _inherits = {}
     _mirrors = {'partner_id': ['warehouse_comment']}
-    _order = 'appointment_date asc, appointment_time asc, state desc'
+    _order = 'appointment_date desc, appointment_time asc, state desc'
     _rec_name = 'name'
     _mail_flat_thread = False
 
