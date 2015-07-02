@@ -1,4 +1,5 @@
-"id","name","model_id:id","group_id:id","perm_read","perm_write","perm_create","perm_unlink"
-"access_fnx_sr_files_guest","fnx.sr.shipping","model_fnx_sr_shipping","group_fnx_sr_guest",1,0,0,0
-"access_fnx_sr_files_user","fnx.sr.shipping","model_fnx_sr_shipping","group_fnx_sr_user",1,1,0,0
-"access_fnx_sr_files_manager","fnx.sr.shipping","model_fnx_sr_shipping","group_fnx_sr_manager",1,1,1,1
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_fnx_sr_files_all,fnx.sr.shipping,model_fnx_sr_shipping,,1,0,0,0
+access_fnx_sr_files_guest,fnx.sr.shipping,model_fnx_sr_shipping,group_fnx_sr_guest,1,0,0,0
+access_fnx_sr_files_user,fnx.sr.shipping,model_fnx_sr_shipping,group_fnx_sr_user,1,1,0,0
+access_fnx_sr_files_manager,fnx.sr.shipping,model_fnx_sr_shipping,group_fnx_sr_manager,1,1,1,1
