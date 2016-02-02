@@ -6,7 +6,8 @@ from openerp import tools
 from openerp.osv import fields, osv
 from openerp.tools import float_compare, DEFAULT_SERVER_DATETIME_FORMAT, detect_server_timezone
 from openerp.tools.translate import _
-from fnx import Date, DateTime, Time, float, get_user_timezone, all_equal
+from fnx import Date, DateTime, Time, float, all_equal
+from fnx.oe import get_user_timezone
 from pytz import timezone
 import logging
 import openerp.addons.decimal_precision as dp
