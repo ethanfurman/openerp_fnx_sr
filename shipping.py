@@ -3,6 +3,7 @@
 from itertools import groupby
 from openerp import netsvc
 from openerp import tools
+from openerp.osv.osv import except_osv as ERPError
 from openerp.osv import fields, osv
 from openerp.tools import float_compare, DEFAULT_SERVER_DATETIME_FORMAT, detect_server_timezone
 from openerp.tools.translate import _
@@ -199,6 +200,10 @@ class fnx_sr_shipping(osv.Model):
     def write(self, cr, uid, id, values, context=None):
         if context is None:
             context = {}
+        hour = values.get('appointment_time', 0.0)
+        if not 0 <= hour < 24.0:
+            _logger.error('invalid time in fnx.sr.shipping: %r', hour)
+            raise ERPError('Invalid Time', 'Time must be between 0:00 and 23:59:59')
         context['mail_create_nolog'] = True
         context['mail_create_nosubscribe'] = True
         if 'state' in values:
