@@ -3,6 +3,7 @@ syntax: glob
 .*.swp
 *~
 .*~
+*.xml
 scripts/find_missing
 scripts/fix_carriers
 scripts/manual_update
