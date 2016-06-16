@@ -1,0 +1,30 @@
+!!! xml1.0
+~openerp
+    ~data
+
+        ~record model='ir.ui.view' #fnx_sr_view_partners_form
+            @name: fnx.sr.view.res.partner.form
+            @model: res.partner
+            @inherit_id ref='base.view_partner_form'
+            @priority eval='18'
+            @arch type='xml'
+                ~page @page_history position='before'
+                    ~page $Shipments visible="groups('fnx_sr.group_fnx_sr_guest')"
+                        @fnxsr_shipped attrs="{'invisible': [('customer','=',False),('supplier','=',False)]}" domain="[('fnxsr_shipped.state','=','draft')]" nolabel='1'
+                            ~tree
+                                @name
+                                @appointment
+                                @partner_source_document
+                                @state
+                        @fnxsr_carried attrs="{'invisible': [('is_carrier','=',False)]}" nolabel='1'
+                            ~tree
+                                @name
+                                @appointment
+                                @partner_source_document
+                                @state
+                        @fnxsr_orders attrs="{'invisible': ['|','|',('is_carrier','=',True),('customer','=',True),('supplier','=',True)]}" nolabel='1'
+                            ~tree
+                                @name
+                                @appointment
+                                @partner_source_document
+                                @state

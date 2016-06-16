@@ -1,0 +1,27 @@
+!!! xml1.0
+~openerp
+
+    ~data noupdate='0'
+
+        ~record model='ir.module.category' #module_fnx_sr
+            @name: FnxSR
+            @sequence: 18
+            @description: Manage Shippping and Receiving
+
+        ~record model='res.groups' #group_fnx_sr_guest
+            @name: Guest
+            @category_id ref='module_fnx_sr'
+            @comment: The user has read-only acess.
+
+        ~record model='res.groups' #group_fnx_sr_user
+            @name: User
+            @category_id ref='module_fnx_sr'
+            @comment: The user has normal access.
+            @implied_ids eval="[(4, ref('group_fnx_sr_guest'))]"
+
+        ~record model='res.groups' #group_fnx_sr_manager
+            @name: Manager
+            @category_id ref='module_fnx_sr'
+            @comment: The user has manager access.
+            @implied_ids eval="[(4, ref('group_fnx_sr_user'))]"
+            @users eval="[(4, ref('base.user_root'))]"

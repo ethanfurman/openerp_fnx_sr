@@ -1,0 +1,287 @@
+!!! xml1.0
+~openerp
+    ~data
+
+        ~menuitem @FnxSR #menu_fnx_sr_root groups='group_fnx_sr_manager,group_fnx_sr_user,group_fnx_sr_guest'
+
+        ~record model='ir.ui.view' #fnx_sr_calendar
+            @name: fnx.sr.calendar
+            @model: fnx.sr.shipping
+            @priority eval='10'
+            @arch type='xml'
+                ~calendar $Calendar_View color='state' date_start='appointment'
+                    @name
+                    @partner_id
+                    @partner_source_document
+                    @carrier_id
+
+        ~record model='ir.ui.view' #fnx_sr_tree
+            @name: fnx.sr.tree
+            @model: fnx.sr.shipping
+            @priority eval='10'
+            @arch type='xml'
+                ~tree $Tree_View create='false' toolbar='1'
+                    @direction
+                    @carrier_id
+                    @appointment
+                    @pallets
+                    @cartons
+                    @weight
+                    @name
+                    @partner_id
+                    @partner_source_document
+                    @state
+
+        ~record model='ir.ui.view' #fnx_sr_form
+            @name: fnx.sr.form
+            @model: fnx.sr.shipping
+            @priority eval='10'
+            @arch type='xml'
+                ~form string='Shipping & Receiving' create='false' version='7.0'
+                    ~header
+                        @state statusbar_visible='draft,scheduled,ready,complete' widget='statusbar'
+                    ~sheet
+                        ~group
+                            ~group
+                                ~div
+                                    ~h1
+                                        @name attrs="{'readonly':True}"
+                                    ~h3
+                                        @direction .oe_inline attrs="{'readonly':True}"
+                                        @partner_source_document .oe_inline attrs="{'invisible':[('partner_source_document','=',False)], 'readonly':True}"
+                                        via
+                                        @carrier_id .oe_inline options="{'create':False, 'create_edit':False, 'limit':15}"
+                                        @preposition .oe_inline attrs="{'readonly':True}"
+                                        @partner_id .oe_inline attrs="{'readonly':True}" options="{'create':False, 'create_edit':False, 'limit':0}"
+                                        ~p
+                                            Order placed by
+                                            @job_title .oe_inline attrs="{'readonly':True}"
+                                            @local_contact_id .oe_inline writeonly="groups('fnx_sr.group_fnx_sr_manager')"
+                                ~div class='oe_right oe_button_box'
+                                    ~button @sr_checkin $Driver_Check-In atts="{readonly':True}" groups='fnx_sr.group_fnx_sr_user' states='draft,scheduled,appt,ready' type='object'
+                                    ~button @sr_complete $Driver_Check-Out atts="{readonly':True}" groups='fnx_sr.group_fnx_sr_user' states='checked_in' type='object'
+                        ~group
+                            ~group
+                                ~div .oe_edit_only
+                                    @appointment_date .oe_inline
+                                    @appointment_time .oe_inline widget='float_time'
+                                @appointment .oe_edit_hide
+                                ~separator colspan='2'
+                                @check_in writeonly="groups('fnx_sr.group_fnx_sr_manager')"
+                                @check_out writeonly="groups('fnx_sr.group_fnx_sr_manager')"
+                                @duration widget='float_time'
+                            ~group
+                                @weight attrs="{'readonly':True}"
+                                @cartons attrs="{'readonly':True}"
+                                @pallets attrs="{'readonly':True}"
+                                ~separator colspan='2'
+                                @appt_scheduled_by_id writeonly="groups('fnx_sr.group_fnx_sr_manager')"
+                                @appt_confirmed_on writeonly="groups('fnx_sr.group_fnx_sr_manager')"
+                        ~notebook
+                            ~page $Warehouse_Comments
+                                @partner_id.warehouse_comment attrs="{'readonly':True}" nolabel='1'
+                            ~page $Order_Comments
+                                @comment
+                            ~page $Manager_Overrides visible="groups('fnx_sr.group_fnx_sr_manager')"
+                                ~separator $Reset_state_to
+                                ~button @sr_draft $Order_Placed context="{'manager_override':True}" type='object'
+                                ~button @sr_schedule $Scheduled context="{'manager_override':True}" type='object'
+                                ~button @sr_appointment string='Ready, needs Appt' context="{'manager_override':True}" type='object'
+                                ~button @sr_ready $Ready context="{'manager_override':True}" type='object'
+                                ~button @sr_checkin $Checked-In context="{'manager_override':True}" type='object'
+                                ~button @sr_complete $Complete context="{'manager_override':True}" type='object'
+                                ~button @sr_cancel $Cancelled context="{'manager_override':True}" type='object'
+                    ~div .oe_chatter
+                        @message_follower_ids widget='mail_followers'
+                        @message_ids nolabel='1' widget='mail_thread'
+
+        ~record model='ir.ui.view' #view_fnx_sr_schedule_appt
+            @name: Schedule Appointment
+            @model: fnx.sr.shipping
+            @arch type='xml'
+                ~form $Schedule_Appointment version='7.0'
+                    ~separator $Schedule_appointment_for_selected_orders colspan='4'
+                    ~group
+                        ~group
+                            @carrier_id options="{'create':False, 'create_edit':False, 'limit':15}"
+                            @appointment_date
+                            @appointment_time widget='float_time'
+                    ~footer
+                        ~button @set_appt $Schedule type='object'
+
+        ~record model='ir.actions.act_window' #action_fnx_sr_schedule_appt
+            @name: Schedule Appointment
+            @type: ir.actions.act_window
+            @res_model: fnx.sr.shipping.schedule_appt
+            @view_type: form
+            @view_mode: form
+            @view_id ref='view_fnx_sr_schedule_appt'
+            @target: new
+            @multi: True
+
+        ~record model='ir.values' #event_fnx_sr_schedule_appt
+            @name: Open Schedule Appointment Form
+            @model_id ref='fnx_sr.model_fnx_sr_shipping'
+            @value eval="'ir.actions.act_window,' + str(ref('action_fnx_sr_schedule_appt'))"
+            @key: action
+            @key2: client_action_multi
+            @model: fnx.sr.shipping
+
+        ~record model='ir.ui.view' #view_fnx_sr_driver_checkin
+            @name: Check-in Driver
+            @model: fnx.sr.shipping
+            @arch type='xml'
+                ~form $Check-in_Driver version='7.0'
+                    ~separator string='Check in driver for selected orders?' colspan='4'
+                    ~footer
+                        ~button @more_checkin $Check-In type='object'
+
+        ~record model='ir.actions.act_window' #action_fnx_sr_driver_checkin
+            @name: Check-in Driver
+            @type: ir.actions.act_window
+            @res_model: fnx.sr.shipping.checkin
+            @view_type: form
+            @view_mode: form
+            @view_id ref='view_fnx_sr_driver_checkin'
+            @target: new
+            @multi: True
+
+        ~record model='ir.values' #event_fnx_sr_driver_checkin
+            @name: Open Driver Check-In Form
+            @model_id ref='fnx_sr.model_fnx_sr_shipping'
+            @value eval="'ir.actions.act_window,' + str(ref('action_fnx_sr_driver_checkin'))"
+            @key: action
+            @key2: client_action_multi
+            @model: fnx.sr.shipping
+
+        ~record model='ir.ui.view' #view_fnx_sr_driver_checkout
+            @name: Check-out Driver
+            @model: fnx.sr.shipping
+            @arch type='xml'
+                ~form $Check-out_Driver version='7.0'
+                    ~separator string='Check out driver for selected orders?' colspan='4'
+                    ~footer
+                        ~button @more_checkout $Check-Out type='object'
+
+        ~record model='ir.actions.act_window' #action_fnx_sr_driver_checkout
+            @name: Check-out Driver
+            @type: ir.actions.act_window
+            @res_model: fnx.sr.shipping.checkout
+            @view_type: form
+            @view_mode: form
+            @view_id ref='view_fnx_sr_driver_checkout'
+            @target: new
+            @multi: True
+
+        ~record model='ir.values' #event_fnx_sr_driver_checkout
+            @name: Open Driver Check-Out Form
+            @model_id ref='fnx_sr.model_fnx_sr_shipping'
+            @value eval="'ir.actions.act_window,' + str(ref('action_fnx_sr_driver_checkout'))"
+            @key: action
+            @key2: client_action_multi
+            @model: fnx.sr.shipping
+
+        ~record model='ir.ui.view' #search_fnx_sr_open_orders
+            @name: Open Orders Search
+            @model: fnx.sr.shipping
+            @arch type='xml'
+                ~search string='Search Shipping & Receiving'
+                    @state $Status
+                    @local_source_document $Local_Document
+                    @partner_source_document $Partner_Document
+                    @carrier_id $Carrier
+                    ~separator
+                    ~filter @type_draft $Order_Placed domain="[('state','=','draft')]"
+                    ~filter @type_scheduled $Scheduled domain="[('state','=','scheduled')]"
+                    ~filter @type_appt string='Ready, Needs Appt' domain="[('state','=','appt')]"
+                    ~filter @type_ready $Ready domain="[('state','=','ready')]"
+                    ~filter @type_checked_in $Driver_checked-in domain="[('state','=','checked_in')]"
+                    ~separator
+                    ~filter @type_shipping $Shipping domain="[('direction','=','outgoing')]"
+                    ~filter @type_receiving $Receiving domain="[('direction','=','incoming')]"
+                    ~separator
+                    ~filter @type_nf_carriers $Non-Falcon_Carriers domain="[('carrier_id.xml_id','not in',['01','25','53','54','56','60'])]"
+                    ~group $Group_by... expand='0'
+                        ~filter $Carrier context="{'group_by': 'carrier_id'}" domain='[]'
+                        ~filter string='Customer/Vendor' context="{'group_by': 'partner_id'}" domain='[]'
+
+        ~record model='ir.ui.view' #search_fnx_sr_closed_orders
+            @name: Closed Orders Search
+            @model: fnx.sr.shipping
+            @arch type='xml'
+                ~search string='Search Shipping & Receiving'
+                    @state $Status
+                    @local_source_document $Local_Document
+                    @partner_source_document $Partner_Document
+                    ~separator
+                    ~filter @type_cancelled $Cancelled domain="[('state','=','cancelled')]"
+                    ~filter @type_complete $Complete domain="[('state','=','complete')]"
+                    ~separator
+                    ~filter @type_shipping $Shipping domain="[('direction','=','outgoing')]"
+                    ~filter @type_receiving $Receiving domain="[('direction','=','incoming')]"
+                    ~separator
+                    ~group $Group_by... expand='0'
+                        ~filter $Carrier context="{'group_by': 'carrier_id'}" domain='[]'
+                        ~filter string='Customer/Vendor' context="{'group_by': 'partner_id'}" domain='[]'
+
+        ~record model='ir.ui.view' #search_fnx_sr_all_orders
+            @name: All Orders Search
+            @model: fnx.sr.shipping
+            @arch type='xml'
+                ~search string='Search Shipping & Receiving'
+                    @state $Status
+                    @local_source_document $Local_Document
+                    @partner_source_document $Partner_Document
+                    ~separator
+                    ~filter @type_draft $Order_Placed domain="[('state','=','draft')]"
+                    ~filter @type_scheduled $Scheduled domain="[('state','=','scheduled')]"
+                    ~filter @type_appt string='Ready, Needs Appt' domain="[('state','=','appt')]"
+                    ~filter @type_ready $Ready domain="[('state','=','ready')]"
+                    ~filter @type_checked_in $Driver_checked-in domain="[('state','=','checked_in')]"
+                    ~filter @type_cancelled $Cancelled domain="[('state','=','cancelled')]"
+                    ~filter @type_complete $Complete domain="[('state','=','complete')]"
+                    ~separator
+                    ~filter @type_shipping $Shipping domain="[('direction','=','outgoing')]"
+                    ~filter @type_receiving $Receiving domain="[('direction','=','incoming')]"
+                    ~separator
+                    ~group $Group_by... expand='0'
+                        ~filter $Carrier context="{'group_by': 'carrier_id'}" domain='[]'
+                        ~filter string='Customer/Vendor' context="{'group_by': 'partner_id'}" domain='[]'
+
+        ~record model='ir.actions.act_window' #action_fnx_sr_form_open_orders
+            @name: Shipping & Receiving - Open Orders
+            @res_model: fnx.sr.shipping
+            @view_type: form
+            @view_id ref='fnx_sr_tree'
+            @view_mode: tree,form,calendar
+            @domain eval="[('state','in',['draft','scheduled','appt','ready','checked_in'])]"
+            @context: {'search_default_type_nf_carriers':1}
+            @search_view_id ref='search_fnx_sr_open_orders'
+            @limit eval='200'
+
+        ~record model='ir.actions.act_window' #action_fnx_sr_form_closed_orders
+            @name: Shipping & Receiving - Closed Orders
+            @res_model: fnx.sr.shipping
+            @view_type: form
+            @view_id ref='fnx_sr_tree'
+            @view_mode: tree,form,calendar
+            @domain eval="[('state','in',['cancelled','complete'])]"
+            @search_view_id ref='search_fnx_sr_closed_orders'
+            @limit eval='200'
+
+        ~record model='ir.actions.act_window' #action_fnx_sr_form_all_orders
+            @name: Shipping & Receiving - All Orders
+            @res_model: fnx.sr.shipping
+            @view_type: form
+            @view_id ref='fnx_sr_tree'
+            @view_mode: tree,form,calendar
+            @search_view_id ref='search_fnx_sr_all_orders'
+            @limit eval='200'
+
+        ~menuitem name='Shipping & Receiving' #menu_fnx_sr_shipping parent='menu_fnx_sr_root' sequence='10'
+
+        ~menuitem name='Open Orders' #menu_item_fnx_sr_schedule_open action='action_fnx_sr_form_open_orders' parent='menu_fnx_sr_shipping' sequence='20'
+
+        ~menuitem name='Closed Orders' #menu_item_fnx_sr_schedule_closed action='action_fnx_sr_form_closed_orders' parent='menu_fnx_sr_shipping' sequence='30'
+
+        ~menuitem name='All Orders' #menu_item_fnx_sr_schedule_all action='action_fnx_sr_form_all_orders' parent='menu_fnx_sr_shipping' sequence='40'

@@ -18,10 +18,10 @@
             #'static/src/js/refresh.js',
         ],
     'data': [
-            'security/security.xml',
+            'security/fnx_sr_security.xaml',
             'security/ir.model.access.csv',
-            'shipping_view.xml',
-            'res_partner_view.xml',
+            'shipping_view.xaml',
+            'res_partner_view.xaml',
         ],
     'test': [],
     'installable': True,
