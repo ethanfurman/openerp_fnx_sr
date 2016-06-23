@@ -1,0 +1,63 @@
+!!!xml1.0
+
+~openerp
+    ~data noupdate='0'
+
+        // mail message subtypes
+
+        ~record model='mail.message.subtype' #mt_ship_rec_draft
+            @name: Order Created
+            @res_model: fnx.sr.shipping
+            @default eval='False'
+            @sequence eval='1'
+            @description: Ticket created.
+
+        ~record model='mail.message.subtype' #mt_ship_rec_ready
+            @name: Order Ready
+            @res_model: fnx.sr.shipping
+            @default eval='False'
+            @sequence eval='31'
+            @description: Order is ready.
+
+        ~record model='mail.message.subtype' #mt_ship_rec_loading_unloading
+            @name: Order Transfer
+            @res_model: fnx.sr.shipping
+            @default eval='False'
+            @sequence eval='41'
+            @description: Order is loading/unloading.
+
+        ~record model='mail.message.subtype' #mt_ship_rec_en_route
+            @name: Order Transit
+            @res_model: fnx.sr.shipping
+            @default eval='False'
+            @sequence eval='51'
+            @description: Order is en route.
+
+        ~record model='mail.message.subtype' #mt_ship_rec_complete
+            @name: Order Complete
+            @res_model: fnx.sr.shipping
+            @default eval='True'
+            @sequence eval='61'
+            @description: Ticket closed.
+
+        ~record model='mail.message.subtype' #mt_ship_rec_cancelled
+            @name: Order Cancelled
+            @res_model: fnx.sr.shipping
+            @default eval='True'
+            @sequence eval='71'
+            @description: Ticket cancelled.
+
+        ~record model='mail.message.subtype' #mt_ship_rec_event_scheduled
+            @name: Order Scheduled
+            @res_model: fnx.sr.shipping
+            @default eval='True'
+            @sequence eval='11'
+            @description: Appointment scheduled.
+
+        ~record model='mail.message.subtype' #mt_ship_rec_event_picked
+            @name: Order Pulled
+            @res_model: fnx.sr.shipping
+            @default eval='True'
+            @sequence eval='21'
+            @description: Order picked.
+
