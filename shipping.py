@@ -118,7 +118,6 @@ class fnx_sr_shipping(osv.Model):
 
 
     def create(self, cr, uid, values, context=None):
-        print '!!! fnx_sr_shipping.create'
         ctx = (context or {}).copy()
         if 'state' in values:
             values['state'] = values['state'].lower()
@@ -185,9 +184,6 @@ class fnx_sr_shipping(osv.Model):
         # return new_id
 
     def write(self, cr, uid, ids, values, context=None):
-        print '###\n##\n#\n#'
-        print '# shipping.write:', ids, values
-        print '#'
         context = (context or {}).copy()
         if isinstance(ids, (int, long)):
             ids = [ids]
@@ -201,7 +197,6 @@ class fnx_sr_shipping(osv.Model):
         if follower_user_ids:
             values['follower_user_ids'] = follower_user_ids
         if ids and ('state' not in values or values['state'] == 'uncancel'):
-            print '# checking records\n#'
             for record in self.browse(cr, SUPERUSER_ID, ids, context=context):
                 # calculate the current state based on the data changes
                 # 
@@ -209,7 +204,6 @@ class fnx_sr_shipping(osv.Model):
                 state = 'draft'
                 old_state = record.state
                 uncancel = values.get('state') == 'uncancel'
-                print '# old state:', old_state
                 if old_state == 'cancelled' and not uncancel:
                     raise ERPError('Invalid Operation', 'This order has been cancelled.')
                 if uncancel:
@@ -221,12 +215,10 @@ class fnx_sr_shipping(osv.Model):
                 # checkin -> loading
                 if proposed.check_in:
                     state = 'loading'
-                    print '# new state:', state
                 # -> transit (not implemented)
                 # checkout -> complete
                 if proposed.check_out:
                     state = 'complete'
-                    print '# new state:', state
                 # -> cancelled (doesn't happen here)
                 # 
                 if not super(fnx_sr_shipping, self).write(cr, uid, [record.id], vals, context=context):
@@ -234,9 +226,7 @@ class fnx_sr_shipping(osv.Model):
                 if state != old_state:
                     if not super(fnx_sr_shipping, self).write(cr, uid, [record.id], {'state': state}, context=context):
                         return False
-            print '#\n##\n###'
             return True
-        print '#\n##\n###'
         return super(fnx_sr_shipping, self).write(cr, uid, ids, values, context=context)
 
     def onchange_appointment(self, cr, uid, ids, appt_date, appt_time, context=None):
