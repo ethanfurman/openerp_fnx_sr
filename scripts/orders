@@ -169,7 +169,12 @@ def fix_carriers():
         values=('settings to use', ),
         )
 def manual_update(**values):
+    # values that need to be converted from str:
+    #    local_contact -> list
     connect_oe(HOST, DB, USER, PW)
+    lc = values.pop('local_contact', None)
+    if lc is not None:
+        values['local_contact'] = lc.split(',')
     update_order(PropertyDict(values))
 
 
@@ -405,15 +410,22 @@ def get_order(order):
     return PropertyDict(g['order'])
 
 def update_order(values):
+    # carrier is the shipping agent
+    # partner is the vendor/customer
+    # partner_source_document is the vendor/customer invoice number / purchase order
+    # local_source_document is the purchase order / invoice number
+    # local_contact is the falcon user
     if not values.local_source_document:
         raise BadFormat('missing local source document')
     context = PropertyDict()
     local_contacts = values.pop('local_contact', None)
+    print('local_contacts:', local_contacts)
     if local_contacts is not None:
         if 'sysadmin' in local_contacts:
             local_contacts.remove('sysadmin')
         records = OE.res_users.search_read(fields=['id'], domain=[('login','in',local_contacts)])
-        values.local_contact_ids = [lc['id'] for lc in records]
+        print('found:\n', '\n'.join(repr(r) for r in records))
+        values.message_follower_user_ids = [lc['id'] for lc in records]
     partner_xmlid = values.pop('partner_xmlid', None)
     if partner_xmlid is not None:
         records = OE.res_partner.search_read(fields=['id', 'module', 'xml_id'], domain=[('module','=',fis_module[values.direction]),('xml_id','=',partner_xmlid)])
@@ -444,31 +456,24 @@ def update_order(values):
         values.pallets = int(values.pallets) or False
     if 'weight' in values:
         values.weight = float(values.weight) or False
-    orders = OE.fnx_shipping.search_read(fields=['id', 'appt_confirmed', 'state'], domain=[('local_source_document','=',values.local_source_document)])
-    order = None
-    existing_state = None
-    for order in orders:
-        existing_state = order['state']
-        break
+    orders = OE.fnx_shipping.search_read(fields=['id'], domain=[('local_source_document','=',values.local_source_document)])
+    if len(orders) > 1:
+        raise ValueError('found more than one order matching %r: %r' % (values.local_source_document, [r.id for r in orders]))
+    elif len(orders) == 1:
+        order = orders[0]
+    else:
+        order = None
+    print('order:', order)
     if not order:
         if not direction:
             raise BadFormat('cannot create new document %r without a direction' % values.local_source_document)
-        if not values.get('state'):
-            values.state = 'draft'
-        existing_state = values.state
-    if 'pallets' in values and values.pallets:
-        if existing_state in ('checked_in', 'complete', 'cancelled'):
-            pass
-        elif existing_state == 'scheduled':
-            values.state = 'ready'
-        else:
-            values.state = 'appt'
     login = values.pop('user', None)
     if login:
         records = OE.res_users.search_read(fields=['id'], domain=[('login','=',login)])
         values.login_id = records[0]['id']
     if not order:
         try:
+            print('creating:\n', values, verbose=0)
             OE.fnx_shipping.create(dict(values), context=dict(context))
         except xmlrpclib.ProtocolError, exc:
             raise BadFormat('Order %s: %s' % (order, (exc)))
@@ -477,11 +482,12 @@ def update_order(values):
             raise
     else:
         try:
+            print('updating:', values.items(), verbose=0)
             OE.fnx_shipping.write([order['id']], dict(values))
         except xmlrpclib.ProtocolError, exc:
             raise BadFormat('Order %s: %s' % (order, (exc)))
         except Exception, exc:
-            print(exc.faultCode, file=stderr)
+            print(exc, file=stderr)
             raise
 
 def get_files(source=SOURCE):
