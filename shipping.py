@@ -125,33 +125,17 @@ class fnx_sr_shipping(osv.Model):
         res_users = self.pool.get('res.users')
         if 'carrier_id' not in values or not values['carrier_id']:
             values['carrier_id'] = res_partner.search(cr, uid, [('xml_id','=','99'),('module','=','F27')])[0]
-        # ctx['mail_create_nolog'] = True
-        # ctx['mail_create_nosubscribe'] = True
         partner_id = values.get('partner_id')
-        # partner_follower_ids = []
-        # user_follower_ids = []
         if partner_id is not None:
             partner = res_partner.browse(cr, uid, values['partner_id'])
-        #     # partner_follower_ids dance is so we don't include Administrator
-        #     partner_follower_ids = [p.id for p in partner.message_follower_ids]
-        #     user_follower_ids = res_users.search(cr, uid, [('partner_id','in',partner_follower_ids),('id','!=',1)])
-        #     user_follower_records = res_users.browse(cr, uid, user_follower_ids)
-        #     partner_follower_ids = [u.partner_id.id for u in user_follower_records]
         real_id = values.pop('login_id', None)
         real_name = None
         direction = values.get('direction')
         if direction is None or partner_id is None:
-            # body = 'Order created.'
             pass
         else:
             direction = DIRECTION[direction].title()
-            # body = '%s order %s %s created.' % (
-            #         direction,
-            #         ('to', 'from')[direction=='sale'],
-            #         partner.name,
-            #         )
         follower_user_ids = values.pop('message_follower_user_ids', [])
-        # follower_ids.extend(user_follower_ids)
         if real_id:
             values['local_contact_id'] = real_id #res_users.browse(cr, uid, real_id, context=context)
             follower_user_ids.append(real_id)
@@ -175,18 +159,15 @@ class fnx_sr_shipping(osv.Model):
                 appt = appt.replace(delta_month=1)
                 values['appointment_date'] = appt.ymd()
         return super(fnx_sr_shipping, self).create(cr, uid, values, context=ctx)
-        # if partner_follower_ids:
-        #     self.message_post(cr, uid, new_id, body=body, partner_ids=partner_follower_ids, subtype='mt_comment', context=context)
-        # else:
-        # self.message_post(cr, uid, new_id, body=body, subtype='fnx_sr.mt_ship_rec_draft', context=context)
-        # if follower_ids:
-        #     self.message_subscribe_users(cr, uid, [new_id], user_ids=follower_ids, context=context)
-        # return new_id
 
     def write(self, cr, uid, ids, values, context=None):
         context = (context or {}).copy()
         if isinstance(ids, (int, long)):
             ids = [ids]
+        hour = values.get('appointment_time', 0.0)
+        if not 0 <= hour < 24.0:
+            _logger.error('invalid time in fnx.sr.shipping: %r', hour)
+            raise ERPError('Invalid Time', 'Time must be between 0:00 and 23:59:59')
         follower_user_ids = values.pop('message_follower_user_ids', [])
         login_id = values.pop('login_id', None)
         if login_id:
