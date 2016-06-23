@@ -13,5 +13,3 @@ class res_partner(osv.Model):
         'fnxsr_carried': fields.one2many('fnx.sr.shipping', 'carrier_id', 'Shipped Orders'),
         'fnxsr_orders': fields.one2many('fnx.sr.shipping', 'local_contact_id', 'Shipped Orders'),
         }
-
-res_partner()
