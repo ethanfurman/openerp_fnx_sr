@@ -20,6 +20,7 @@
     'data': [
             'security/fnx_sr_security.xaml',
             'security/ir.model.access.csv',
+            'shipping_data.xaml',
             'shipping_view.xaml',
             'res_partner_view.xaml',
         ],
