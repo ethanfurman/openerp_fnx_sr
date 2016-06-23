@@ -39,9 +39,9 @@
             @arch type='xml'
                 ~form string='Shipping & Receiving' create='false' version='7.0'
                     ~header
-                        ~button @button_complete $Close_Order type='object' states='draft,ready,loading,transit'
-                        ~button @button_cancel $Cancel_Order type='object' states='draft,ready,loading,transit'
-                        ~button @button_reopen $Reopen_Order type='object' states='complete,cancelled'
+                        ~button @button_complete $Close_Order .oe_edit_hide type='object' states='draft,ready,loading,transit'
+                        ~button @button_cancel $Cancel_Order .oe_edit_hide type='object' states='draft,ready,loading,transit'
+                        ~button @button_reopen $Reopen_Order .oe_edit_hide type='object' states='complete,cancelled'
                         @state statusbar_visible='draft,ready,complete' widget='statusbar'
                     ~sheet
                         ~group
