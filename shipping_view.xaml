@@ -39,7 +39,10 @@
             @arch type='xml'
                 ~form string='Shipping & Receiving' create='false' version='7.0'
                     ~header
-                        @state statusbar_visible='draft,scheduled,ready,complete' widget='statusbar'
+                        ~button @button_complete $Close_Order type='object' states='draft,ready,loading,transit'
+                        ~button @button_cancel $Cancel_Order type='object' states='draft,ready,loading,transit'
+                        ~button @button_reopen $Reopen_Order type='object' states='complete,cancelled'
+                        @state statusbar_visible='draft,ready,complete' widget='statusbar'
                     ~sheet
                         ~group
                             ~group
@@ -58,13 +61,12 @@
                                             @job_title .oe_inline attrs="{'readonly':True}"
                                             @local_contact_id .oe_inline writeonly="groups('fnx_sr.group_fnx_sr_manager')"
                                 ~div class='oe_right oe_button_box'
-                                    ~button @sr_checkin $Driver_Check-In atts="{readonly':True}" groups='fnx_sr.group_fnx_sr_user' states='draft,scheduled,appt,ready' type='object'
-                                    ~button @sr_complete $Driver_Check-Out atts="{readonly':True}" groups='fnx_sr.group_fnx_sr_user' states='checked_in' type='object'
+                                    ~button @button_checkin $Driver_Check-In groups='fnx_sr.group_fnx_sr_user' type='object' states='draft,ready' context="{'override': False'}"
+                                    ~button @button_complete $Driver_Check-Out groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False'}"
                         ~group
                             ~group
-                                ~div .oe_edit_only
-                                    @appointment_date .oe_inline
-                                    @appointment_time .oe_inline widget='float_time'
+                                @appointment_date .oe_inline .oe_edit_only on_change='onchange_appointment(appointment_date, appointment_time)'
+                                @appointment_time .oe_inline .oe_edit_only widget='float_time' on_change='onchange_appointment(appointment_date, appointment_time)'
                                 @appointment .oe_edit_hide
                                 ~separator colspan='2'
                                 @check_in writeonly="groups('fnx_sr.group_fnx_sr_manager')"
@@ -82,15 +84,6 @@
                                 @partner_id.warehouse_comment attrs="{'readonly':True}" nolabel='1'
                             ~page $Order_Comments
                                 @comment
-                            ~page $Manager_Overrides visible="groups('fnx_sr.group_fnx_sr_manager')"
-                                ~separator $Reset_state_to
-                                ~button @sr_draft $Order_Placed context="{'manager_override':True}" type='object'
-                                ~button @sr_schedule $Scheduled context="{'manager_override':True}" type='object'
-                                ~button @sr_appointment string='Ready, needs Appt' context="{'manager_override':True}" type='object'
-                                ~button @sr_ready $Ready context="{'manager_override':True}" type='object'
-                                ~button @sr_checkin $Checked-In context="{'manager_override':True}" type='object'
-                                ~button @sr_complete $Complete context="{'manager_override':True}" type='object'
-                                ~button @sr_cancel $Cancelled context="{'manager_override':True}" type='object'
                     ~div .oe_chatter
                         @message_follower_ids widget='mail_followers'
                         @message_ids nolabel='1' widget='mail_thread'
