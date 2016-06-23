@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 
+from collections import OrderedDict
 from itertools import groupby
-from openerp import netsvc
-from openerp import tools
+from openerp import netsvc, tools, SUPERUSER_ID
 from openerp.osv import fields, osv
+from openerp.osv.osv import except_osv as ERPError
 from openerp.tools import float_compare, DEFAULT_SERVER_DATETIME_FORMAT, detect_server_timezone
 from openerp.tools.translate import _
 from fnx import Date, DateTime, Time, float, all_equal
-from fnx.oe import get_user_timezone
+from fnx.oe import get_user_timezone, Proposed
 from pytz import timezone
 import logging
 import openerp.addons.decimal_precision as dp
@@ -33,30 +34,27 @@ class fnx_sr_shipping(osv.Model):
     _rec_name = 'name'
     _mail_flat_thread = False
 
+    _track = OrderedDict()
+    _track['appointment'] = {
+            'fnx_sr.mt_ship_rec_event_scheduled': lambda s, c, u, r, ctx: 'appointment' in r and r['appointment'],
+            }
+    _track['pallets'] = {
+            'fnx_sr.mt_ship_rec_event_picked': lambda s, c, u, r, ctx: 'pallets' in r and r['pallets'],
+            }
+    state = OrderedDict()
+    state['fnx_sr.mt_ship_rec_draft'] = lambda s, c, u, r, ctx: r['state'] == 'draft'
+    state['fnx_sr.mt_ship_rec_ready'] = lambda s, c, u, r, ctx: r['state'] == 'ready'
+    state['fnx_sr.mt_ship_rec_loading_unloading'] = lambda s, c, u, r, ctx: r['state'] == 'loading'
+    state['fnx_sr.mt_ship_rec_en_route'] = lambda s, c, u, r, ctx: r['state'] == 'transit'
+    state['fnx_sr.mt_ship_rec_complete'] = lambda s, c, u, r, ctx: r['state'] == 'complete'
+    state['fnx_sr.mt_ship_rec_cancelled'] = lambda s, c, u, r, ctx: r['state'] == 'cancelled'
+    _track['state'] = state
+    del state
+
     def _document_name_get(self, cr, uid, ids, _field, _arg, context=None):
         result = {}
         for record in self.browse(cr, uid, ids, context=context):
             result[record.id] = {'incoming':'PO ', 'outgoing':'Inv '}.get(record.direction, '') + record.local_source_document
-        return result
-
-    def _calc_appointment(self, cr, uid, ids, _field=None, _arg=None, context=None):
-        if context is None:
-            context = {}
-        result = {}
-        user_tz = get_user_timezone(self, cr, uid)[uid]
-        if user_tz:
-            user_tz = timezone(user_tz)
-        for id in ids:
-            result[id] = False
-            record = self.browse(cr, uid, id, context=context)
-            date = record.appointment_date
-            time = record.appointment_time or 0.0
-            if date:
-                if not user_tz:
-                    continue
-                dt = DateTime.combine(Date(date), Time.fromfloat(time)).datetime()
-                dt = user_tz.localize(dt)
-                result[id] = dt
         return result
 
     def _calc_duration(self, cr, uid, ids, _field=None, _arg=None, context=None):
@@ -70,20 +68,24 @@ class fnx_sr_shipping(osv.Model):
                 result[id] = float(check_out - check_in)
         return result
 
-    def _generate_order_by(self, order_spec, query):
-        "correctly orders state field if state is in query"
-        order_by = super(fnx_sr_shipping, self)._generate_order_by(order_spec, query)
-        if order_spec and 'state ' in order_spec:
-            state_column = self._columns['state']
-            state_order = 'CASE '
-            for i, state in enumerate(state_column.selection):
-                state_order += "WHEN %s.state='%s' THEN %i " % (self._table, state[0], i)
-            state_order += 'END '
-            order_by = order_by.replace('"%s"."state" ' % self._table, state_order)
-        return order_by
-
     _columns = {
 
+        'state': fields.selection([
+            ('draft', 'Order Placed'),
+            ('ready', 'Ready'),
+            ('loading', 'Loading/Unloading'),
+            ('transit', 'En Route'),
+            ('complete', 'Complete'),
+            ('cancelled', 'Cancelled'),
+            ], 'Status',
+            sort_order='definition',
+            help="Draft     --> Initial entry of order.\n"
+                 "Ready     --> Order has been pulled and palletized, carrier appointment has been confirmed.\n"
+                 "Loading/Unloading --> Order is being transferred to/from the delivery truck.\n"
+                 "En Route  --> Order is travelling to destination.\n"
+                 "Complete  --> Order has been shipped.\n"
+                 "Cancelled --> Order was cancelled.",
+            ),
         'name': fields.function(_document_name_get, type='char', string='Document', store=True),
         'direction': fields.selection([('incoming', 'Receiving'), ('outgoing', 'Shipping')], "Type of shipment", required=False),
         'local_contact_id': fields.many2one('res.partner', string='Local employee', ondelete='restrict'),
@@ -97,28 +99,12 @@ class fnx_sr_shipping(osv.Model):
         'weight': fields.float('Weight'),
         'cartons': fields.integer('# of cartons'),
         'pallets': fields.integer('# of pallets'),
-        'state': fields.selection([
-            ('draft', 'Order Placed'),
-            ('scheduled', 'Scheduled'),
-            ('appt', 'Ready, needs Appt'),
-            ('ready', 'Ready'),
-            ('checked_in', 'Loading/Unloading'),
-            ('complete', 'Complete'),
-            ('cancelled', 'Cancelled'),
-            ], 'Status',
-            help="Draft     --> Initial entry of order.\n"
-                 "Scheduled --> Confirmed appt with carrier.\n"
-                 "Ready, needs Appt --> Order is palletized, but appointment has not been confirmed.\n"
-                 "Ready     --> Order has been pulled and palletized, carrier appointment has been confirmed.\n"
-                 "Complete  --> Order has been shipped.\n",
-            ),
         'comment': fields.text('Comments', help="Comment or instructions for this order only."),
 
         'carrier_id': fields.many2one('res.partner', 'Shipper', domain=[('is_carrier','=',True)]),
         'appointment_date': fields.date('Appointment date', help="Date when driver should arrive."),
         'appointment_time': fields.float('Appointment time', help="Time when driver should arrive."),
-        'appointment': fields.function(_calc_appointment, type='datetime', string='Appointment',
-                store={'fnx.sr.shipping': (_calc_appointment, ['appointment_date', 'appointment_time'], 10)}),
+        'appointment': fields.datetime('Appointment', track_visibility='change_only'),
         'duration': fields.function(_calc_duration, type='float', string='Duration (in hours)',
                 store={'fnx.sr.shipping': (_calc_duration, ['check_in', 'check_out'], 10)}),
         'appt_scheduled_by_id': fields.many2one('res.users', 'Scheduled by', help="Falcon employee that scheduled appointment."),
@@ -132,44 +118,45 @@ class fnx_sr_shipping(osv.Model):
 
 
     def create(self, cr, uid, values, context=None):
-        if context == None:
-            context = {}
+        print '!!! fnx_sr_shipping.create'
+        ctx = (context or {}).copy()
         if 'state' in values:
             values['state'] = values['state'].lower()
         res_partner = self.pool.get('res.partner')
         res_users = self.pool.get('res.users')
         if 'carrier_id' not in values or not values['carrier_id']:
             values['carrier_id'] = res_partner.search(cr, uid, [('xml_id','=','99'),('module','=','F27')])[0]
-        context['mail_create_nolog'] = True
-        context['mail_create_nosubscribe'] = True
+        # ctx['mail_create_nolog'] = True
+        # ctx['mail_create_nosubscribe'] = True
         partner_id = values.get('partner_id')
-        partner_follower_ids = []
-        user_follower_ids = []
+        # partner_follower_ids = []
+        # user_follower_ids = []
         if partner_id is not None:
             partner = res_partner.browse(cr, uid, values['partner_id'])
-            # partner_follower_ids dance is so we don't include Administrator
-            partner_follower_ids = [p.id for p in partner.message_follower_ids]
-            user_follower_ids = res_users.search(cr, uid, [('partner_id','in',partner_follower_ids),('id','!=',1)])
-            user_follower_records = res_users.browse(cr, uid, user_follower_ids)
-            partner_follower_ids = [u.partner_id.id for u in user_follower_records]
+        #     # partner_follower_ids dance is so we don't include Administrator
+        #     partner_follower_ids = [p.id for p in partner.message_follower_ids]
+        #     user_follower_ids = res_users.search(cr, uid, [('partner_id','in',partner_follower_ids),('id','!=',1)])
+        #     user_follower_records = res_users.browse(cr, uid, user_follower_ids)
+        #     partner_follower_ids = [u.partner_id.id for u in user_follower_records]
         real_id = values.pop('login_id', None)
         real_name = None
         direction = values.get('direction')
         if direction is None or partner_id is None:
-            body = 'Order created.'
+            # body = 'Order created.'
+            pass
         else:
             direction = DIRECTION[direction].title()
-            body = '%s order %s %s created.' % (
-                    direction,
-                    ('to', 'from')[direction=='sale'],
-                    partner.name,
-                    )
-        follower_ids = values.pop('local_contact_ids', [])
-        follower_ids.extend(user_follower_ids)
+            # body = '%s order %s %s created.' % (
+            #         direction,
+            #         ('to', 'from')[direction=='sale'],
+            #         partner.name,
+            #         )
+        follower_user_ids = values.pop('message_follower_user_ids', [])
+        # follower_ids.extend(user_follower_ids)
         if real_id:
             values['local_contact_id'] = real_id #res_users.browse(cr, uid, real_id, context=context)
-            follower_ids.append(real_id)
-            real_name = res_users.browse(cr, uid, real_id, context=context).partner_id.name
+            follower_user_ids.append(real_id)
+            real_name = res_users.browse(cr, uid, real_id, context=ctx).partner_id.name
             if direction is None or partner_id is None:
                 body = '%s submitted order.' % real_name
             else:
@@ -180,6 +167,7 @@ class fnx_sr_shipping(osv.Model):
                         ('to', 'for')[direction=='sale'],
                         partner.name,
                         )
+        values['message_follower_user_ids'] = follower_user_ids
         if 'appointment_date' in values:
             try:
                 appt = Date.fromymd(values['appointment_date'])
@@ -187,223 +175,131 @@ class fnx_sr_shipping(osv.Model):
                 appt = Date.fromymd(values['appointment_date'][:-2] + '01')
                 appt = appt.replace(delta_month=1)
                 values['appointment_date'] = appt.ymd()
-        new_id = super(fnx_sr_shipping, self).create(cr, uid, values, context=context)
-        if partner_follower_ids:
-            self.message_post(cr, uid, new_id, body=body, partner_ids=partner_follower_ids, subtype='mt_comment', context=context)
-        else:
-            self.message_post(cr, uid, new_id, body=body, context=context)
-        if follower_ids:
-            self.message_subscribe_users(cr, uid, [new_id], user_ids=follower_ids, context=context)
-        return new_id
+        return super(fnx_sr_shipping, self).create(cr, uid, values, context=ctx)
+        # if partner_follower_ids:
+        #     self.message_post(cr, uid, new_id, body=body, partner_ids=partner_follower_ids, subtype='mt_comment', context=context)
+        # else:
+        # self.message_post(cr, uid, new_id, body=body, subtype='fnx_sr.mt_ship_rec_draft', context=context)
+        # if follower_ids:
+        #     self.message_subscribe_users(cr, uid, [new_id], user_ids=follower_ids, context=context)
+        # return new_id
 
-    def write(self, cr, uid, id, values, context=None):
-        if context is None:
-            context = {}
-        context['mail_create_nolog'] = True
-        context['mail_create_nosubscribe'] = True
-        if 'state' in values:
-            values['state'] = values['state'].lower()
-        state = None
-        follower_ids = values.pop('local_contact_ids', [])
+    def write(self, cr, uid, ids, values, context=None):
+        print '###\n##\n#\n#'
+        print '# shipping.write:', ids, values
+        print '#'
+        context = (context or {}).copy()
+        if isinstance(ids, (int, long)):
+            ids = [ids]
+        follower_user_ids = values.pop('message_follower_user_ids', [])
         login_id = values.pop('login_id', None)
-        real_name = None
         if login_id:
             res_users = self.pool.get('res.users')
             partner = res_users.browse(cr, uid, login_id, context=context).partner_id
             values['local_contact_id'] = partner.id
-            follower_ids.append(login_id)
-        if not context.pop('from_workflow', False):
-            state = values.pop('state', None)
-        result = super(fnx_sr_shipping, self).write(cr, uid, id, values, context=context)
-        if 'appointment_time' in values:
-            self.sr_schedule(cr, uid, id, context=context)
-        if state is not None:
-            wf = self.WORKFLOW[state]
-            wf(self, cr, uid, id, context=context)
-        if follower_ids:
-            self.message_subscribe_users(cr, uid, id, user_ids=follower_ids, context=context)
-        return result
-
-    def sr_draft(self, cr, uid, ids, context=None):
-        if context is None:
-            context = {}
-        context['from_workflow'] = True
-        override = context.get('manager_override')
-        values = {'state':'draft'}
-        if override:
-            values['appointment_time'] = 0.0
-            values['appt_confirmed'] = False
-            values['appt_confirmed_on'] = False
-            values['appt_scheduled_by_id'] = False
-            values['check_in'] = False
-            values['check_out'] = False
-        if self.write(cr, uid, ids, values, context=context):
-            if override:
-                context['mail_create_nosubscribe'] = True
-                self.message_post(cr, uid, ids, body="Reset to draft", context=context)
+            follower_user_ids.append(login_id)
+        if follower_user_ids:
+            values['follower_user_ids'] = follower_user_ids
+        if ids and ('state' not in values or values['state'] == 'uncancel'):
+            print '# checking records\n#'
+            for record in self.browse(cr, SUPERUSER_ID, ids, context=context):
+                # calculate the current state based on the data changes
+                # 
+                vals = values.copy()
+                state = 'draft'
+                old_state = record.state
+                uncancel = values.get('state') == 'uncancel'
+                print '# old state:', old_state
+                if old_state == 'cancelled' and not uncancel:
+                    raise ERPError('Invalid Operation', 'This order has been cancelled.')
+                if uncancel:
+                    del vals['state']
+                proposed = Proposed(self, cr, values, record)
+                # appt -> scheduled
+                if proposed.appointment and proposed.pallets:
+                    state = 'ready'
+                # checkin -> loading
+                if proposed.check_in:
+                    state = 'loading'
+                    print '# new state:', state
+                # -> transit (not implemented)
+                # checkout -> complete
+                if proposed.check_out:
+                    state = 'complete'
+                    print '# new state:', state
+                # -> cancelled (doesn't happen here)
+                # 
+                if not super(fnx_sr_shipping, self).write(cr, uid, [record.id], vals, context=context):
+                    return False
+                if state != old_state:
+                    if not super(fnx_sr_shipping, self).write(cr, uid, [record.id], {'state': state}, context=context):
+                        return False
+            print '#\n##\n###'
             return True
-        return False
+        print '#\n##\n###'
+        return super(fnx_sr_shipping, self).write(cr, uid, ids, values, context=context)
 
-    def sr_schedule(self, cr, uid, ids, context=None):
-        if context is None:
-            context = {}
-        if isinstance(ids, (int, long)):
-            ids = [ids]
-        context['from_workflow'] = True
-        user_tz = get_user_timezone(self, cr, uid)[uid]
-        override = context.get('manager_override')
-        current = self.browse(cr, uid, ids, context=context)[0]
-        if current.appointment_date and current.appointment_time:
-            values = {
-                    'appt_scheduled_by_id': uid,
-                    'appt_confirmed': True,
-                    'appt_confirmed_on': DateTime.now(),
+    def onchange_appointment(self, cr, uid, ids, appt_date, appt_time, context=None):
+        value = {'appointment': False}
+        res = {'value': value}
+        # XXX: change this hardcoded time zone after all users verified to not be in UTC
+        # and res.users no longer has UTC as the default time zone
+        # user_tz = timezone(get_user_timezone(self, cr, uid)[uid])
+        user_tz = timezone('America/Los_Angeles')
+        utc = timezone('UTC')
+
+        if not user_tz:
+            return {
+                    'warning': {
+                        'title': 'Missing Time Zone',
+                        'message': 'You must have your time zone set.\n'
+                                   'Check your preferences (click on your name in the upper-right corner)',
+                        },
                     }
-            if override:
-                values['state'] = 'scheduled'
-            elif current.state == 'draft':
-                values['state'] = 'scheduled'
-            elif current.state == 'appt':
-                values['state'] = 'ready'
-            dt = utc.localize(DateTime(current.appointment).datetime())
-            if user_tz:
-                dt = dt.astimezone(timezone(user_tz))
-            body = 'Scheduled for %s' % (dt.strftime('%Y-%m-%d %H:%M %Z'), )
-            if override:
-                values['check_in'] = False
-                values['check_out'] = False
-                values['appt_confirmed_on'] = current.appt_confirmed_on
-                body = 'Reset to scheduled.'
-            if self.write(cr, uid, ids, values, context=context):
-                context['mail_create_nosubscribe'] = True
-                for id in ids:
-                    self.message_post(cr, uid, id, body=body, context=context)
-                return True
-        return False
+        if appt_date and appt_time:
+            dt = DateTime.combine(Date(appt_date), Time.fromfloat(appt_time)).datetime()
+            dt = user_tz.normalize(user_tz.localize(dt)).astimezone(utc)
+            value['appointment'] = dt.strftime(DEFAULT_SERVER_DATETIME_FORMAT)
+        return res
 
-    def sr_appointment(self, cr, uid, ids, context=None):
-        if context is None:
-            context = {}
-        if isinstance(ids, (int, long)):
-            ids = [ids]
-        context['from_workflow'] = True
-        override = context.get('manager_override')
-        values = {'state':'appt'}
-        body = 'Order pulled.'
-        if override:
-            values['appointment_time'] = 0.0
-            values['appt_confirmed'] = False
-            values['appt_confirmed_on'] = False
-            values['appt_scheduled_by_id'] = False
-            values['check_in'] = False
-            values['check_out'] = False
-            body = 'Appointment cancelled.'
-        if self.write(cr, uid, ids, values, context=context):
-            context['mail_create_nosubscribe'] = True
-            for id in ids:
-                self.message_post(cr, uid, id, body=body, context=context)
-            return True
-        return False
-
-    def sr_ready(self, cr, uid, ids, context=None):
-        if context is None:
-            context = {}
-        if isinstance(ids, (int, long)):
-            ids = [ids]
-        context['from_workflow'] = True
-        override = context.get('manager_override')
-        values = {'state':'ready'}
-        body = 'Order pulled.'
-        current = self.browse(cr, uid, ids, context=context)[0]
-        if not (current.appointment_date and current.appointment_time):
-            return False
-        if override:
-            values['check_in'] = False
-            values['check_out'] = False
-            body = 'Reset to Ready.'
-        if self.write(cr, uid, ids, values, context=context):
-            context['mail_create_nosubscribe'] = True
-            for id in ids:
-                self.message_post(cr, uid, id, body=body, context=context)
-            return True
-        return False
-
-    def sr_checkin(self, cr, uid, ids, context=None):
-        if context is None:
-            context = {}
+    def button_complete(self, cr, uid, ids, context=None):
+        ctx = (context or {}).copy()
+        values = {}
         if isinstance(ids, (int, long)):
             ids = [ids]
         if len(ids) > 1:
             # check all have the same carrier
-            records = self.browse(cr, uid, ids, context=context)
+            records = self.browse(cr, uid, ids, context=ctx)
             carrier_ids = [r.carrier_id.id for r in records]
             if not all_equal(carrier_ids):
                 raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
-        context['from_workflow'] = True
-        override = context.get('manager_override')
-        current = self.browse(cr, uid, ids, context=context)[0]
-        values = {
-                'state':'checked_in',
-                'check_in': current.check_in or DateTime.now(),
-                }
-        body = 'Driver checked in'
-        if override:
-            values['check_out'] = False
-            body = 'Reset to Driver checked in.'
-        if self.write(cr, uid, ids, values, context=context):
-            context['mail_create_nosubscribe'] = True
-            for id in ids:
-                self.message_post(cr, uid, id, body=body, context=context)
-            return True
-        return False
-
-    def sr_complete(self, cr, uid, ids, context=None):
-        if context is None:
-            context = {}
-        if isinstance(ids, (int, long)):
-            ids = [ids]
-        if len(ids) > 1:
-            # check all have the same carrier
-            records = self.browse(cr, uid, ids, context=context)
-            carrier_ids = [r.carrier_id.id for r in records]
-            if not all_equal(carrier_ids):
-                raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
-        context['from_workflow'] = True
-        override = context.get('manager_override')
-        order_update = context.get('order_update')
-        values = {'state':'complete'}
-        if not order_update:
-            values['check_out'] = DateTime.now()
-            body = 'Driver checked out'
+        values['check_out'] = DateTime.now()
+        # values['state'] = 'complete'
+        override = context.get('override', True)
         for id in ids:
-            current = self.browse(cr, uid, id, context=context)
+            current = self.browse(cr, uid, id, context=ctx)
             if override:
-                values['check_out'] = current.check_out or False
-                body = 'Reset to Complete.'
-            if self.write(cr, uid, id, values, context=context):
-                context['mail_create_nosubscribe'] = True
-                followers = self._get_followers(cr, uid, [id], None, None, context=context)[id]['message_follower_ids']
-                if not order_update:
-                    self.message_post(cr, uid, id, body=body, context=context)
-                if current.direction == 'incoming':
-                    message = 'Complete:  received from %s.' % current.partner_id.name
-                else:
-                    message = 'Complete:  shipped to %s.' % current.partner_id.name
-                self.message_post(cr, uid, id, body=message, subtype='mt_comment', partner_ids=followers, context=context)
+                values['check_out'] = current.check_out or values['check_out']
+                ctx['mail_create_nosubscribe'] = True
+                ctx['message_force'] = 'Manager override:'
+            self.write(cr, uid, id, values, context=ctx)
         return True
 
-    def sr_cancel(self, cr, uid, ids, context=None):
-        if context is None:
-            context = {}
+    def button_cancel(self, cr, uid, ids, context=None):
+        ctx = (context or {}).copy()
         if isinstance(ids, (int, long)):
             ids = [ids]
-        context['from_workflow'] = True
-        if self.write(cr, uid, ids, {'state':'cancelled'}, context=context):
-            context['mail_create_nosubscribe'] = True
-            for id in ids:
-                self.message_post(cr, uid, id, body='Order cancelled.', context=context)
-            return True
-        return False
+        ctx['mail_create_nosubscribe'] = True
+        ctx['message_force'] = 'Manager override:'
+        return self.write(cr, uid, ids, {'state':'cancelled'}, context=ctx)
+
+    def button_reopen(self, cr, uid, ids, context=None):
+        ctx = (context or {}).copy()
+        if isinstance(ids, (int, long)):
+            ids = [ids]
+        ctx['mail_create_nosubscribe'] = True
+        ctx['message_force'] = 'Manager override: reset to '
+        return self.write(cr, uid, ids, {'state': 'uncancel', 'check_out': False}, context=ctx)
 
     def search(self, cr, user, args=None, offset=0, limit=None, order=None, context=None, count=False):
         # 2013 08 12  (yyyy mm dd)
@@ -449,16 +345,6 @@ class fnx_sr_shipping(osv.Model):
                 raise ValueError('unable to process domain: %r' % arg)
         return super(fnx_sr_shipping, self).search(cr, user, args=new_args, offset=offset, limit=limit, order=order, context=context, count=count)
 
-    WORKFLOW = {
-        'draft': sr_draft,
-        'scheduled': sr_schedule,
-        'appt': sr_appointment,
-        'ready': sr_ready,
-        'checked_in': sr_checkin,
-        'complete': sr_complete,
-        'cancelled': sr_cancel,
-        }
-fnx_sr_shipping()
 
 class fnx_sr_shipping_schedule_appt(osv.osv_memory):
     _name = 'fnx.sr.shipping.schedule_appt'
@@ -493,19 +379,25 @@ class fnx_sr_shipping_schedule_appt(osv.osv_memory):
         }
 
     def set_appt(self, cr, uid, ids, context=None):
+        # context contains 'active_id', 'active_ids', and 'active_model'
         if context is None:
             return False
         if len(ids) > 1:
+            # should never happen
             raise ValueError("Can only handle one id at a time")
         order_ids = context.get('active_ids')
         if order_ids is None:
             return False
+        # get link to active_model
         sr = self.pool.get('fnx.sr.shipping')
+        # get memory model record with data
         record = self.browse(cr, uid, ids[0], context=context)
         values = {}
+        # save to values dict
         values['appointment_date'] = record.appointment_date
         values['appointment_time'] = record.appointment_time
         values['carrier_id'] = record.carrier_id.id
+        # update records in active_model
         return sr.write(cr, uid, order_ids, values, context=context)
 fnx_sr_shipping_schedule_appt()
 
