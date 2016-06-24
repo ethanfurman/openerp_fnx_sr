@@ -302,6 +302,24 @@ def reprocess_missing(date):
         directory=('directory of orders to add/update in system', OPTION, 'd', Path),
         )
 def update(file, directory=SOURCE):
+    """
+    Add files with the structure of
+
+        order={
+          'appointment_date': '20140107',
+          'carrier_xmlid': '99',
+          'cartons': '9',
+          'direction': 'outgoing',
+          'local_contact': ['sysadmin', 'rgiannini', 'ethan'],
+          'local_source_document': '999999',
+          'pallets': 0,
+          'partner_source_document': 'PO TEST',
+          'partner_xmlid': 'AWGRO',
+          'weight': '139',
+          }
+
+    to OpenERP.FnxSR.
+    """
     if file:
         files = [file]
         lock = None
@@ -415,6 +433,17 @@ def update_order(values):
     # partner_source_document is the vendor/customer invoice number / purchase order
     # local_source_document is the purchase order / invoice number
     # local_contact is the falcon user
+    #
+    # appointment_date -> 20140107
+    # carrier_xmlid --> 99
+    # cartons --> 9
+    # direction --> outgoing
+    # local_contact --> 'sysadmin', 'rgiannini', 'ethan']
+    # local_source_document --> 999999
+    # pallets --> 3
+    # partner_source_document --> PO TEST
+    # partner_xmlid --> AWGRO
+    # weight --> 139
     if not values.local_source_document:
         raise BadFormat('missing local source document')
     context = PropertyDict()
