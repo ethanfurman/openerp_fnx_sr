@@ -172,7 +172,7 @@ class fnx_sr_shipping(osv.Model):
             values['local_contact_id'] = partner.id
             follower_user_ids.append(login_id)
         if follower_user_ids:
-            values['follower_user_ids'] = follower_user_ids
+            values['message_follower_user_ids'] = follower_user_ids
         if ids and ('state' not in values or values['state'] == 'uncancel'):
             for record in self.browse(cr, SUPERUSER_ID, ids, context=context):
                 # calculate the current state based on the data changes
