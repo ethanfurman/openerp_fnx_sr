@@ -65,8 +65,8 @@
                                     ~button @button_complete $Driver_Check-Out groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False'}"
                         ~group
                             ~group
-                                @appointment_date .oe_inline .oe_edit_only on_change='onchange_appointment(appointment_date, appointment_time)'
-                                @appointment_time .oe_inline .oe_edit_only widget='float_time' on_change='onchange_appointment(appointment_date, appointment_time)'
+                                @appointment_date .oe_edit_only on_change='onchange_appointment(appointment_date, appointment_time)'
+                                @appointment_time .oe_edit_only widget='float_time' on_change='onchange_appointment(appointment_date, appointment_time)'
                                 @appointment .oe_edit_hide
                                 ~separator colspan='2'
                                 @check_in writeonly="groups('fnx_sr.group_fnx_sr_manager')"
