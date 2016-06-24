@@ -164,10 +164,6 @@ class fnx_sr_shipping(osv.Model):
         context = (context or {}).copy()
         if isinstance(ids, (int, long)):
             ids = [ids]
-        hour = values.get('appointment_time', 0.0)
-        if not 0 <= hour < 24.0:
-            _logger.error('invalid time in fnx.sr.shipping: %r', hour)
-            raise ERPError('Invalid Time', 'Time must be between 0:00 and 23:59:59')
         follower_user_ids = values.pop('message_follower_user_ids', [])
         login_id = values.pop('login_id', None)
         if login_id:
@@ -227,8 +223,17 @@ class fnx_sr_shipping(osv.Model):
                                    'Check your preferences (click on your name in the upper-right corner)',
                         },
                     }
-        if appt_date and appt_time:
-            dt = DateTime.combine(Date(appt_date), Time.fromfloat(appt_time)).datetime()
+        if appt_date:
+            # will never see an invalid date due to javascript library
+            date = Date(appt_date)
+        if appt_time:
+            # may see an invalid time
+            try:
+                time = Time.fromfloat(appt_time)
+            except:
+                raise ERPError('Invalid Time', 'Time should be between 0:00 and 23:59 (not %s)' % appt_time)
+        if date and time:
+            dt = DateTime.combine(date, time).datetime()
             dt = user_tz.normalize(user_tz.localize(dt)).astimezone(utc)
             value['appointment'] = dt.strftime(DEFAULT_SERVER_DATETIME_FORMAT)
         return res
