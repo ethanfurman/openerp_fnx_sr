@@ -135,10 +135,10 @@ class fnx_sr_shipping(osv.Model):
             pass
         else:
             direction = DIRECTION[direction].title()
-        follower_user_ids = values.pop('message_follower_user_ids', [])
+        follower_ids = values.pop('message_follower_ids', [])
         if real_id:
-            values['local_contact_id'] = real_id #res_users.browse(cr, uid, real_id, context=context)
-            follower_user_ids.append(real_id)
+            real_user = res_users.browse(cr, uid, real_id, context=context)
+            follower_ids.append(real_user.partner_id.id)
             real_name = res_users.browse(cr, uid, real_id, context=ctx).partner_id.name
             if direction is None or partner_id is None:
                 body = '%s submitted order.' % real_name
@@ -150,7 +150,8 @@ class fnx_sr_shipping(osv.Model):
                         ('to', 'for')[direction=='sale'],
                         partner.name,
                         )
-        values['message_follower_user_ids'] = follower_user_ids
+        if follower_ids:
+            values['message_follower_ids'] = follower_ids
         if 'appointment_date' in values:
             try:
                 appt = Date.fromymd(values['appointment_date'])
@@ -164,15 +165,15 @@ class fnx_sr_shipping(osv.Model):
         context = (context or {}).copy()
         if isinstance(ids, (int, long)):
             ids = [ids]
-        follower_user_ids = values.pop('message_follower_user_ids', [])
+        follower_ids = values.pop('message_follower_ids', [])
         login_id = values.pop('login_id', None)
         if login_id:
             res_users = self.pool.get('res.users')
             partner = res_users.browse(cr, uid, login_id, context=context).partner_id
             values['local_contact_id'] = partner.id
-            follower_user_ids.append(login_id)
-        if follower_user_ids:
-            values['message_follower_user_ids'] = follower_user_ids
+            follower_ids.append(partner.id)
+        if follower_ids:
+            values['message_follower_ids'] = follower_ids
         if ids and ('state' not in values or values['state'] == 'uncancel'):
             for record in self.browse(cr, SUPERUSER_ID, ids, context=context):
                 # calculate the current state based on the data changes

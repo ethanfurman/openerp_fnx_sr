@@ -452,9 +452,9 @@ def update_order(values):
     if local_contacts is not None:
         if 'sysadmin' in local_contacts:
             local_contacts.remove('sysadmin')
-        records = OE.res_users.search_read(fields=['id'], domain=[('login','in',local_contacts)])
+        records = OE.res_users.search_read(fields=['id', 'partner_id'], domain=[('login','in',local_contacts)])
         print('found:\n', '\n'.join(repr(r) for r in records))
-        values.message_follower_user_ids = [lc['id'] for lc in records]
+        values.message_follower_ids = [lc['partner_id'][0] for lc in records]
     partner_xmlid = values.pop('partner_xmlid', None)
     if partner_xmlid is not None:
         records = OE.res_partner.search_read(fields=['id', 'module', 'xml_id'], domain=[('module','=',fis_module[values.direction]),('xml_id','=',partner_xmlid)])
