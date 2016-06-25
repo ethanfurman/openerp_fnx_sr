@@ -215,7 +215,7 @@ class fnx_sr_shipping(osv.Model):
         # user_tz = timezone(get_user_timezone(self, cr, uid)[uid])
         user_tz = timezone('America/Los_Angeles')
         utc = timezone('UTC')
-
+        date = time = None
         if not user_tz:
             return {
                     'warning': {
