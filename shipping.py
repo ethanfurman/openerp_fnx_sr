@@ -239,9 +239,24 @@ class fnx_sr_shipping(osv.Model):
             value['appointment'] = dt.strftime(DEFAULT_SERVER_DATETIME_FORMAT)
         return res
 
-    def button_complete(self, cr, uid, ids, context=None):
+    def sr_checkin(self, cr, uid, ids, context=None):
         ctx = (context or {}).copy()
-        values = {}
+        if isinstance(ids, (int, long)):
+            ids = [ids]
+        if len(ids) > 1:
+            # check all have the same carrier
+            records = self.browse(cr, uid, ids, context=context)
+            carrier_ids = [r.carrier_id.id for r in records]
+            if not all_equal(carrier_ids):
+                raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
+        context['mail_create_nosubscribe'] = True
+        values = {
+                'check_in': DateTime.now(),
+                }
+        return self.write(cr, uid, ids, values, context=context)
+
+    def sr_checkout(self, cr, uid, ids, context=None):
+        ctx = (context or {}).copy()
         if isinstance(ids, (int, long)):
             ids = [ids]
         if len(ids) > 1:
@@ -250,17 +265,12 @@ class fnx_sr_shipping(osv.Model):
             carrier_ids = [r.carrier_id.id for r in records]
             if not all_equal(carrier_ids):
                 raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
-        values['check_out'] = DateTime.now()
-        # values['state'] = 'complete'
-        override = context.get('override', True)
-        for id in ids:
-            current = self.browse(cr, uid, id, context=ctx)
-            if override:
-                values['check_out'] = current.check_out or values['check_out']
-                ctx['mail_create_nosubscribe'] = True
-                ctx['message_force'] = 'Manager override:'
-            self.write(cr, uid, id, values, context=ctx)
-        return True
+        values = {'check_out':  DateTime.now()}
+        ctx['mail_create_nosubscribe'] = True
+        if context.get('override', True):
+            ctx['message_force'] = 'Manager override:'
+        return self.write(cr, uid, ids, values, context=ctx)
+    button_complete = sr_checkout
 
     def button_cancel(self, cr, uid, ids, context=None):
         ctx = (context or {}).copy()
@@ -399,7 +409,7 @@ class fnx_sr_shipping_checkout(osv.osv_memory):
             return False
         order_ids = context['active_ids']
         sr = self.pool.get('fnx.sr.shipping')
-        return sr.sr_complete(cr, uid, order_ids, context=context)
+        return sr.sr_checkout(cr, uid, order_ids, context=context)
 fnx_sr_shipping_checkout()
 
 
