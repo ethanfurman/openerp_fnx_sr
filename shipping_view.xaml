@@ -185,10 +185,8 @@
                     @carrier_id $Carrier
                     ~separator
                     ~filter @type_draft $Order_Placed domain="[('state','=','draft')]"
-                    ~filter @type_scheduled $Scheduled domain="[('state','=','scheduled')]"
-                    ~filter @type_appt string='Ready, Needs Appt' domain="[('state','=','appt')]"
                     ~filter @type_ready $Ready domain="[('state','=','ready')]"
-                    ~filter @type_checked_in $Driver_checked-in domain="[('state','=','checked_in')]"
+                    ~filter @type_loading string='Loading/Unloading' domain="[('state','=','loading')]"
                     ~separator
                     ~filter @type_shipping $Shipping domain="[('direction','=','outgoing')]"
                     ~filter @type_receiving $Receiving domain="[('direction','=','incoming')]"
@@ -227,10 +225,8 @@
                     @partner_source_document $Partner_Document
                     ~separator
                     ~filter @type_draft $Order_Placed domain="[('state','=','draft')]"
-                    ~filter @type_scheduled $Scheduled domain="[('state','=','scheduled')]"
-                    ~filter @type_appt string='Ready, Needs Appt' domain="[('state','=','appt')]"
                     ~filter @type_ready $Ready domain="[('state','=','ready')]"
-                    ~filter @type_checked_in $Driver_checked-in domain="[('state','=','checked_in')]"
+                    ~filter @type_loading string='Loading/Unloading' domain="[('state','=','loading')]"
                     ~filter @type_cancelled $Cancelled domain="[('state','=','cancelled')]"
                     ~filter @type_complete $Complete domain="[('state','=','complete')]"
                     ~separator
@@ -247,7 +243,7 @@
             @view_type: form
             @view_id ref='fnx_sr_tree'
             @view_mode: tree,form,calendar
-            @domain eval="[('state','in',['draft','scheduled','appt','ready','checked_in'])]"
+            @domain eval="[('state','in',['draft','ready','loading'])]"
             @context: {'search_default_type_nf_carriers':1}
             @search_view_id ref='search_fnx_sr_open_orders'
             @limit eval='200'
