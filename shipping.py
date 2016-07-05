@@ -255,6 +255,22 @@ class fnx_sr_shipping(osv.Model):
                 }
         return self.write(cr, uid, ids, values, context=context)
 
+    def sr_uncheckin(self, cr, uid, ids, context=None):
+        ctx = (context or {}).copy()
+        if isinstance(ids, (int, long)):
+            ids = [ids]
+        if len(ids) > 1:
+            # check all have the same carrier
+            records = self.browse(cr, uid, ids, context=context)
+            carrier_ids = [r.carrier_id.id for r in records]
+            if not all_equal(carrier_ids):
+                raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
+        context['mail_create_nosubscribe'] = True
+        values = {
+                'check_in': False,
+                }
+        return self.write(cr, uid, ids, values, context=context)
+
     def sr_checkout(self, cr, uid, ids, context=None):
         ctx = (context or {}).copy()
         if isinstance(ids, (int, long)):

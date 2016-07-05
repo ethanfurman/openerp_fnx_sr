@@ -62,6 +62,7 @@
                                             @local_contact_id .oe_inline writeonly="groups('fnx_sr.group_fnx_sr_manager')"
                                 ~div class='oe_right oe_button_box'
                                     ~button @sr_checkin $Driver_Check-In groups='fnx_sr.group_fnx_sr_user' type='object' states='draft,ready' context="{'override': False'}"
+                                    ~button @sr_uncheckin $Undo_Check-In groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False'}"
                                     ~button @sr_checkout $Driver_Check-Out groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False'}"
                         ~group
                             ~group
