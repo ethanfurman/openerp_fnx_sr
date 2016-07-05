@@ -245,15 +245,15 @@ class fnx_sr_shipping(osv.Model):
             ids = [ids]
         if len(ids) > 1:
             # check all have the same carrier
-            records = self.browse(cr, uid, ids, context=context)
+            records = self.browse(cr, uid, ids, context=ctx)
             carrier_ids = [r.carrier_id.id for r in records]
             if not all_equal(carrier_ids):
                 raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
-        context['mail_create_nosubscribe'] = True
+        ctx['mail_create_nosubscribe'] = True
         values = {
                 'check_in': DateTime.now(),
                 }
-        return self.write(cr, uid, ids, values, context=context)
+        return self.write(cr, uid, ids, values, context=ctx)
 
     def sr_uncheckin(self, cr, uid, ids, context=None):
         ctx = (context or {}).copy()
@@ -265,11 +265,12 @@ class fnx_sr_shipping(osv.Model):
             carrier_ids = [r.carrier_id.id for r in records]
             if not all_equal(carrier_ids):
                 raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
-        context['mail_create_nosubscribe'] = True
+        ctx['mail_create_nosubscribe'] = True
+        ctx['message_force'] = 'Ticket un-checked-in: reset to'
         values = {
                 'check_in': False,
                 }
-        return self.write(cr, uid, ids, values, context=context)
+        return self.write(cr, uid, ids, values, context=ctx)
 
     def sr_checkout(self, cr, uid, ids, context=None):
         ctx = (context or {}).copy()
@@ -283,7 +284,7 @@ class fnx_sr_shipping(osv.Model):
                 raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
         values = {'check_out':  DateTime.now()}
         ctx['mail_create_nosubscribe'] = True
-        if context.get('override', True):
+        if ctx.get('override', True):
             ctx['message_force'] = 'Manager override:'
         return self.write(cr, uid, ids, values, context=ctx)
     button_complete = sr_checkout
