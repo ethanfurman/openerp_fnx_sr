@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
+from collections import defaultdict
 from pandaemonium import PidLockFile, AlreadyLocked
 from scription import Script, Command, Main, OrmFile, mail, REQUIRED, OPTION, MULTI
 from scription import *
 from syslog import syslog
 from VSS import Date, DateTime
+from VSS.BBxXlate.fisData import fisData
 from VSS.path import Path
 from VSS.time_machine import PropertyDict
 from VSS.utils import ProgressBar, Enum, IntEnum, AutoEnum
@@ -165,6 +167,56 @@ def fix_carriers():
             OE.fnx_shipping.write([sr.id], values)
 
 
+@Command()
+def info():
+    print('loading OPAR', verbose=0)
+    opar = fisData(54, subset='10%6s%6s')
+    print('total OPAR records:', len(opar), verbose=0)
+    opar_company = fisData(54, subset='%2s')
+    print('OPAR possible matches:', len(opar_company.get_subset(('10',))), verbose=0)
+    connect_oe(HOST, DB, USER, PW)
+    print('getting partner records', verbose=0)
+    partners = dict([
+            (r.id, r.xml_id)
+            for r in get_records(
+                OE.res_partner,
+                fields=['id', 'xml_id'],
+                )
+            ])
+    print('getting orders', verbose=0)
+    all_orders = get_records(
+            OE.fnx_shipping,
+            fields=['id', 'state', 'name', 'direction', 'appointment_date', 'partner_id', 'local_source_document'],
+            )
+    month = defaultdict(lambda: dict(total=0, outgoing=0, incoming=0, opar=0, draft=0, ready=0, loading=0, complete=0, cancelled=0, unknown=0))
+    totals = dict(total=0, outgoing=0, incoming=0, opar=0, draft=0, ready=0, loading=0, complete=0, cancelled=0, unknown=0)
+    pb = ProgressBar(len(all_orders), message="tallying orders")
+    for order in all_orders:
+        pb.tick()
+        appt = order.appointment_date and order.appointment_date[:7] or False
+        if opar.get_subset((partners[order.partner_id[0]], order.local_source_document)):
+            month[appt]['opar'] += 1
+            totals['opar'] += 1
+        month[appt]['total'] += 1
+        month[appt][order.direction] += 1
+        if order.direction == 'outgoing':
+            month[appt][order.state or 'unknown'] += 1
+            totals[order.state or 'unknown'] += 1
+        totals[order.direction] += 1
+        totals['total'] += 1
+    print('        | incoming  outgoing | open a/r | draft  ready  loading  complete  cancelled  unknown | totals', verbose=0)
+    print('------- + --------  -------- + -------- + -----  -----  -------  --------  ---------  ------- + ------', verbose=0)
+    template = '%(month)7s | %(incoming)8s  %(outgoing)8d | %(opar)8s | %(draft)5d  %(ready)5d  %(loading)7d  %(complete)8d  %(cancelled)9d  %(unknown)7d | %(total)6d'
+    for month, counts in sorted(month.items()):
+        counts['month'] = month or 'missing'
+        print(template % counts, verbose=0)
+    print('------- + --------  -------- + -----  -----  -------  --------  --------- + ------ + ------', verbose=0)
+    template = '%(month)7s | %(incoming)8s  %(outgoing)8d | %(opar)8s | %(draft)5d  %(ready)5d  %(loading)7d  %(complete)8d  %(cancelled)9d  %(unknown)7d | %(total)6d'
+    totals['month'] = 'all'
+    print(template % totals, verbose=0)
+
+
+
 @Command(
         values=('settings to use', ),
         )
@@ -190,6 +242,78 @@ def missing_check():
         if order not in orders:
             print(order, verbose=0)
     print(verbose=0)
+
+
+@Command(
+        dryrun=('display affected records instead of deleting them', FLAG),
+        )
+def purge(dryrun):
+    """
+    removes orders that are:
+    - shipping, complete, more than 3 months old, and not in OPAR; or
+    - receiving, complete, and more than 6 months old; or
+    - more than 1 year old
+    """
+    print('connecting to %s:%s' % (HOST, DB))
+    connect_oe(HOST, DB, USER, PW)
+    print('loading OPAR')
+    opar = fisData(54, subset='10%6s%6s')
+    print('total OPAR records:', len(opar))
+    opar_company = fisData(54, subset='%2s')
+    print('OPAR possible matches:', len(opar_company.get_subset(('10',))))
+    fields = ['id', 'local_source_document', 'partner_id']
+    print('getting candidate shipped orders')
+    shipped_orders = get_records(
+            OE.fnx_shipping,
+            domain=[('direction','=','outgoing'),('state','in',['complete','cancelled']),('appointment_date','<','Month6')],
+            fields=fields,
+            )
+    print('getting candidate received orders')
+    received_orders = get_records(
+            OE.fnx_shipping,
+            domain=[('direction','=','incoming'),('state','in',['complete','cancelled']),('appointment_date','<','Month6')],
+            fields=fields,
+            )
+    print('getting aged-out incomplete orders')
+    dead_orders = get_records(
+            OE.fnx_shipping,
+            domain=[('state','not in',['complete','cancelled']),('appointment_date','<','Month12')],
+            fields=fields,
+            )
+    print('getting partner records')
+    partners = dict([
+            (r.id, r.xml_id)
+            for r in get_records(
+                OE.res_partner,
+                fields=['id', 'xml_id'],
+                )
+            ])
+    # check each shipped order to make sure it does not have an
+    # open A/R invoice attached
+    pb = ProgressBar(len(shipped_orders), message="calculating dead received orders")
+    dead_shipped_ids = [
+            r.id
+            for r in shipped_orders
+            if pb.tick() or not opar.get_subset((partners[r.partner_id[0]], r.local_source_document))
+            ]
+    dead_received_ids = [r.id for r in received_orders]
+    dead_ids = [r.id for r in dead_orders]
+    if dryrun:
+        print('%d shipped candidates' % len(shipped_orders), verbose=0)
+        print('%d dead shipped' % len(dead_shipped_ids), verbose=0)
+        print('%d dead receivables' % len(received_orders), verbose=0)
+        print('%d dead dead' % len(dead_orders), verbose=0)
+    else:
+        # delete the old stuff
+        # starting with the dead shipped
+        print('removing %d shipped orders' % len(dead_shipped_ids))
+        OE.fnx_shipping.unlink(dead_shipped_ids)
+        # and the old purchased orders
+        print('removing %d received orders' % len(dead_received_ids))
+        OE.fnx_shipping.unlink(dead_received_ids)
+        # and the seriously old stuff
+        print('removing %d very old orders' % len(dead_ids))
+        OE.fnx_shipping.unlink(dead_ids)
 
 
 @Command(
@@ -529,5 +653,44 @@ def connect_oe(hostname, database, user, password):
     OE.res_partner = conn.get_model('res.partner')
     OE.res_users = conn.get_model('res.users')
     OE.fnx_shipping = conn.get_model('fnx.sr.shipping')
+
+
+class F54(str, Enum):
+    """
+    OPAR - OPEN ACCOUNTS RECEIVABLE FILE MAINTENANC
+    """
+    company_id            = 'An$(1,2)'       # COMPANY CODE
+    cust_no               = 'An$(3,6)'       # CUSTOMER NO.
+    inv_no                = 'An$(9,6)'       # INVOICE NO.
+    trans_no              = 'An$(15,6)'      # TRANSACTION NO.
+    gross                 = 'An'             # GROSS (INVTY SLS)
+    cash_disc             = 'Bn'             # CASH DISCOUNT
+    other_charges         = 'Cn'             # OTHER CHARGES
+    freight_amt           = 'Dn'             # FREIGHT AMOUNT
+    net_amt               = 'En'             # NET AMOUNT
+    terms_id              = 'Bn$'            # TERMS CODE
+    inv_date              = 'Cn$'            # INVOICE DATE
+    pymt_amt              = 'Fn'             # PAYMENT AMOUNT
+    pymt_date             = 'Dn$'            # PAYMENT DATE
+    disc_taken            = 'Gn'             # Discount Taken
+    other_allwnc_amt      = 'Hn'             # Other Allowance Amount
+    adj_id                = 'In'             # Adjustment Code
+    total_drs             = 'Jn'             # Total Debits
+    total_crs             = 'Kn'             # Total Credits
+    company_id            = 'En$(1,2)'       # Company Code
+    ship_to_id            = 'En$(3,4)'       # Ship to Code
+    cust_po_no            = 'Fn$'            # Customer P.O. Number
+    paid_by_chk_no        = 'Gn$'            # Paid by Check Number
+    gl_acct_for_ar        = 'Hn$'            # G/L Account for A/R
+    terms_date            = 'In$(1,6)'       # Terms Date
+    date_posted           = 'In$(7,6)'       # Date Posted
+    order_date            = 'In$(13,6)'      # Order Date
+    sales_rep             = 'In$(19,4)'      # Sales Rep(from conv)
+    date_shipped          = 'In$(23,6)'      # Date Shipped
+    no_chg_pick_prnt_code = 'In$(29,4)'      # NO CHG,PICK,PRNT,CODE
+    fin_charge            = 'In$(33,1)'      # Fin Charge(CR=yes,N=no)
+    comment               = 'In$(34,10)'     # Comment
+
+
 
 Main()
