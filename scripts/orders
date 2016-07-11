@@ -3,6 +3,7 @@ from __future__ import print_function
 
 from collections import defaultdict
 from pandaemonium import PidLockFile, AlreadyLocked
+from scandir import scandir
 from scription import Script, Command, Main, OrmFile, mail, REQUIRED, OPTION, MULTI
 from scription import *
 from syslog import syslog
@@ -249,7 +250,9 @@ def missing_check():
         )
 def purge(dryrun):
     """
-    removes orders that are:
+    removes completed or out-of-date orders and their interface files
+
+    criteria:
     - shipping, complete, more than 3 months old, and not in OPAR; or
     - receiving, complete, and more than 6 months old; or
     - more than 1 year old
@@ -290,19 +293,38 @@ def purge(dryrun):
             ])
     # check each shipped order to make sure it does not have an
     # open A/R invoice attached
-    pb = ProgressBar(len(shipped_orders), message="calculating dead received orders")
-    dead_shipped_ids = [
-            r.id
-            for r in shipped_orders
-            if pb.tick() or not opar.get_subset((partners[r.partner_id[0]], r.local_source_document))
-            ]
-    dead_received_ids = [r.id for r in received_orders]
-    dead_ids = [r.id for r in dead_orders]
+    dead_lsds = []
+    pb = ProgressBar(len(shipped_orders)+len(received_orders)+len(dead_orders), message="calculating dead orders")
+    dead_shipped_ids = []
+    dead_received_ids = []
+    dead_ids = []
+    for id_tracker, id_source, check_inv in (
+            (dead_shipped_ids, shipped_orders, True),
+            (dead_received_ids, received_orders, False),
+            (dead_ids, dead_orders, False),
+            ):
+        pb.tick()
+        for record in id_source:
+            if check_inv and opar.get_subset((partners[record.partner_id[0]], record.local_source_document)):
+                # open A/R invoices exist
+                continue
+            id_tracker.append(record.id)
+            dead_lsds.append(record.local_source_document)
     if dryrun:
         print('%d shipped candidates' % len(shipped_orders), verbose=0)
         print('%d dead shipped' % len(dead_shipped_ids), verbose=0)
         print('%d dead receivables' % len(received_orders), verbose=0)
         print('%d dead dead' % len(dead_orders), verbose=0)
+        all_orders = set([o.local_source_document for o in get_records(OE.fnx_shipping, fields=['local_source_document'])])
+        orphaned_count = 0
+        for folder in (ARCHIVE, ERRORS):
+            seen = set()
+            for entry in scandir(folder):
+                entry = Path(entry.path)
+                stem = entry.filename.split('_')[0]
+                if stem not in seen:
+                    orphaned_count += 1
+        print('%d orphaned files' % orphaned_count, verbose=0)
     else:
         # delete the old stuff
         # starting with the dead shipped
@@ -314,6 +336,24 @@ def purge(dryrun):
         # and the seriously old stuff
         print('removing %d very old orders' % len(dead_ids))
         OE.fnx_shipping.unlink(dead_ids)
+        # and then the interface files
+        for lsd in dead_lsds:
+            ARCHIVE.unlink(lsd + '_*')
+            ERRORS.unlink(lsd + '_*')
+        all_orders = set([o.local_source_document for o in get_records(OE.fnx_shipping, fields=['local_source_document'])])
+        orphaned = set()
+        orphaned_count = 0
+        for folder in (ARCHIVE, ERRORS):
+            seen = set()
+            for entry in scandir(folder):
+                entry = Path(entry.path)
+                stem = entry.filename.split('_')[0]
+                if stem not in seen:
+                    orphaned.add(entry)
+                    orphaned_count += 1
+        print('removing %d orphaned files' % orphaned_count)
+        for entry in orphaned:
+            entry.unlink('*')
 
 
 @Command(
