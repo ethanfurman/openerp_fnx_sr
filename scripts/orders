@@ -337,7 +337,6 @@ def purge(dryrun):
         print('%d dead receivables' % len(received_orders), verbose=0)
         print('%d dead dead' % len(dead_orders), verbose=0)
         print('%d orphaned files' % len(dead_files), verbose=0)
-        print('\n'.join(dead_files), verbose=0)
     else:
         # delete the old stuff
         # starting with the dead shipped
@@ -665,7 +664,7 @@ def update_order(values):
         values.login_id = records[0]['id']
     if not order:
         try:
-            print('creating:\n', values, verbose=0)
+            print('creating:\n', values)
             OE.fnx_shipping.create(dict(values), context=dict(context))
         except xmlrpclib.ProtocolError, exc:
             raise BadFormat('Order %s: %s' % (order, (exc)))
@@ -674,7 +673,7 @@ def update_order(values):
             raise
     else:
         try:
-            print('updating:', values.items(), verbose=0)
+            print('updating:', values.items())
             OE.fnx_shipping.write([order['id']], dict(values))
         except xmlrpclib.ProtocolError, exc:
             raise BadFormat('Order %s: %s' % (order, (exc)))
