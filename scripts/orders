@@ -266,23 +266,26 @@ def purge(dryrun):
     print('OPAR possible matches:', len(opar_company.get_subset(('10',))))
     fields = ['id', 'local_source_document', 'partner_id']
     print('getting candidate shipped orders')
-    shipped_orders = get_records(
-            OE.fnx_shipping,
-            domain=[('direction','=','outgoing'),('state','in',['complete','cancelled']),('appointment_date','<','Month6')],
-            fields=fields,
-            )
+    shipped_orders = dict([(o.local_source_document, o)
+            for o in get_records(
+                OE.fnx_shipping,
+                domain=[('direction','=','outgoing'),('state','in',['complete','cancelled']),('appointment_date','<','Month6')],
+                fields=fields,
+                )])
     print('getting candidate received orders')
-    received_orders = get_records(
-            OE.fnx_shipping,
-            domain=[('direction','=','incoming'),('state','in',['complete','cancelled']),('appointment_date','<','Month6')],
-            fields=fields,
-            )
+    received_orders = dict([(o.local_source_document, o)
+            for o in get_records(
+                OE.fnx_shipping,
+                domain=[('direction','=','incoming'),('state','in',['complete','cancelled']),('appointment_date','<','Month6')],
+                fields=fields,
+                )])
     print('getting aged-out incomplete orders')
-    dead_orders = get_records(
-            OE.fnx_shipping,
-            domain=[('state','not in',['complete','cancelled']),('appointment_date','<','Month12')],
-            fields=fields,
-            )
+    dead_orders = dict([(o.local_source_document, o)
+            for o in get_records(
+                OE.fnx_shipping,
+                domain=[('state','not in',['complete','cancelled']),('appointment_date','<','Month12')],
+                fields=fields,
+                )])
     print('getting partner records')
     partners = dict([
             (r.id, r.xml_id)
@@ -293,38 +296,48 @@ def purge(dryrun):
             ])
     # check each shipped order to make sure it does not have an
     # open A/R invoice attached
-    dead_lsds = []
     pb = ProgressBar(len(shipped_orders)+len(received_orders)+len(dead_orders), message="calculating dead orders")
-    dead_shipped_ids = []
-    dead_received_ids = []
-    dead_ids = []
+    dead_shipped_ids = set()
+    dead_received_ids = set()
+    dead_ids = set()
+    dead_files = set()
+    all_dead_ids = set()
     for id_tracker, id_source, check_inv in (
             (dead_shipped_ids, shipped_orders, True),
             (dead_received_ids, received_orders, False),
             (dead_ids, dead_orders, False),
             ):
         pb.tick()
-        for record in id_source:
-            if check_inv and opar.get_subset((partners[record.partner_id[0]], record.local_source_document)):
+        for local_source_document, record in id_source.items():
+            if check_inv and opar.get_subset((partners[record.partner_id[0]], local_source_document)):
                 # open A/R invoices exist
                 continue
-            id_tracker.append(record.id)
-            dead_lsds.append(record.local_source_document)
+            id_tracker.add(record.id)
+            all_dead_ids.add(record.id)
+    # find dead files
+    # - get all records
+    # - filter to live records
+    # - mark non-live files
+    all_orders = get_records(OE.fnx_shipping, fields=['local_source_document'])
+    live_lsds = set([o.local_source_document for o in all_orders if o.id not in all_dead_ids])
+    # error directory is "live"
+    live_lsds.add('error')
+    # all_order_ids = set([o.id for o in all_orders])
+    # all_order_lsds = set([o.local_source_document for o in all_orders])
+    dead_files = []
+    for folder in (ARCHIVE, ERRORS):
+        for entry in scandir(folder):
+            entry = Path(entry.path)
+            stem = entry.filename.split('_')[0]
+            if stem not in live_lsds:
+                dead_files.append(entry)
     if dryrun:
         print('%d shipped candidates' % len(shipped_orders), verbose=0)
         print('%d dead shipped' % len(dead_shipped_ids), verbose=0)
         print('%d dead receivables' % len(received_orders), verbose=0)
         print('%d dead dead' % len(dead_orders), verbose=0)
-        all_orders = set([o.local_source_document for o in get_records(OE.fnx_shipping, fields=['local_source_document'])])
-        orphaned_count = 0
-        for folder in (ARCHIVE, ERRORS):
-            seen = set()
-            for entry in scandir(folder):
-                entry = Path(entry.path)
-                stem = entry.filename.split('_')[0]
-                if stem not in seen:
-                    orphaned_count += 1
-        print('%d orphaned files' % orphaned_count, verbose=0)
+        print('%d orphaned files' % len(dead_files), verbose=0)
+        print('\n'.join(dead_files), verbose=0)
     else:
         # delete the old stuff
         # starting with the dead shipped
@@ -337,23 +350,9 @@ def purge(dryrun):
         print('removing %d very old orders' % len(dead_ids))
         OE.fnx_shipping.unlink(dead_ids)
         # and then the interface files
-        for lsd in dead_lsds:
-            ARCHIVE.unlink(lsd + '_*')
-            ERRORS.unlink(lsd + '_*')
-        all_orders = set([o.local_source_document for o in get_records(OE.fnx_shipping, fields=['local_source_document'])])
-        orphaned = set()
-        orphaned_count = 0
-        for folder in (ARCHIVE, ERRORS):
-            seen = set()
-            for entry in scandir(folder):
-                entry = Path(entry.path)
-                stem = entry.filename.split('_')[0]
-                if stem not in seen:
-                    orphaned.add(entry)
-                    orphaned_count += 1
         print('removing %d orphaned files' % orphaned_count)
-        for entry in orphaned:
-            entry.unlink('*')
+        for entry in dead_files:
+            entry.unlink()
 
 
 @Command(
