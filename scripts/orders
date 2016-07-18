@@ -307,8 +307,8 @@ def purge(dryrun):
             (dead_received_ids, received_orders, False),
             (dead_ids, dead_orders, False),
             ):
-        pb.tick()
         for local_source_document, record in id_source.items():
+            pb.tick()
             if check_inv and opar.get_subset((partners[record.partner_id[0]], local_source_document)):
                 # open A/R invoices exist
                 continue
@@ -339,19 +339,23 @@ def purge(dryrun):
         print('%d orphaned files' % len(dead_files), verbose=0)
     else:
         # delete the old stuff
-        # starting with the dead shipped
-        print('removing %d shipped orders' % len(dead_shipped_ids))
-        OE.fnx_shipping.unlink(dead_shipped_ids)
-        # and the old purchased orders
-        print('removing %d received orders' % len(dead_received_ids))
-        OE.fnx_shipping.unlink(dead_received_ids)
-        # and the seriously old stuff
-        print('removing %d very old orders' % len(dead_ids))
-        OE.fnx_shipping.unlink(dead_ids)
-        # and then the interface files
-        print('removing %d orphaned files' % orphaned_count)
-        for entry in dead_files:
-            entry.unlink()
+        if dead_shipped_ids:
+            # starting with the dead shipped
+            print('removing %d shipped orders' % len(dead_shipped_ids))
+            OE.fnx_shipping.unlink(list(dead_shipped_ids))
+        if dead_received_ids:
+            # and the old purchased orders
+            print('removing %d received orders' % len(dead_received_ids))
+            OE.fnx_shipping.unlink(list(dead_received_ids))
+        if dead_ids:
+            # and the seriously old stuff
+            print('removing %d very old orders' % len(dead_ids))
+            OE.fnx_shipping.unlink(list(dead_ids))
+        if dead_files:
+            # and then the interface files
+            print('removing %d orphaned files' % len(dead_files))
+            for entry in dead_files:
+                entry.unlink()
 
 
 @Command(
