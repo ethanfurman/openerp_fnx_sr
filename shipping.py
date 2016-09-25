@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
 
 from collections import OrderedDict
-from itertools import groupby
-from openerp import netsvc, tools, SUPERUSER_ID
+from dbf import RelativeDay
+from openerp import SUPERUSER_ID
 from openerp.osv import fields, osv
 from openerp.osv.osv import except_osv as ERPError
-from openerp.tools import float_compare, DEFAULT_SERVER_DATETIME_FORMAT, detect_server_timezone
-from openerp.tools.translate import _
+from openerp.tools import DEFAULT_SERVER_DATETIME_FORMAT
 from fnx import Date, DateTime, Time, float, all_equal
-from fnx.oe import get_user_timezone, Proposed
+from fnx.oe import Proposed
 from pytz import timezone
 import logging
-import openerp.addons.decimal_precision as dp
-import time
 
 _logger = logging.getLogger(__name__)
 
@@ -118,18 +115,14 @@ class fnx_sr_shipping(osv.Model):
 
 
     def create(self, cr, uid, values, context=None):
-        ctx = (context or {}).copy()
         if 'state' in values:
             values['state'] = values['state'].lower()
         res_partner = self.pool.get('res.partner')
         res_users = self.pool.get('res.users')
         if 'carrier_id' not in values or not values['carrier_id']:
-            values['carrier_id'] = res_partner.search(cr, uid, [('xml_id','=','99'),('module','=','F27')])[0]
+            values['carrier_id'] = res_partner.search(cr, uid, [('xml_id','=','99'),('module','=','F27')], context=context)[0]
         partner_id = values.get('partner_id')
-        if partner_id is not None:
-            partner = res_partner.browse(cr, uid, values['partner_id'])
         real_id = values.pop('login_id', None)
-        real_name = None
         direction = values.get('direction')
         if direction is None or partner_id is None:
             pass
@@ -139,17 +132,6 @@ class fnx_sr_shipping(osv.Model):
         if real_id:
             real_user = res_users.browse(cr, uid, real_id, context=context)
             follower_ids.append(real_user.partner_id.id)
-            real_name = res_users.browse(cr, uid, real_id, context=ctx).partner_id.name
-            if direction is None or partner_id is None:
-                body = '%s submitted order.' % real_name
-            else:
-                body = '%s submitted %s order %s %s %s' % (
-                        real_name,
-                        direction,
-                        local_source_document,
-                        ('to', 'for')[direction=='sale'],
-                        partner.name,
-                        )
         if follower_ids:
             values['message_follower_ids'] = follower_ids
         if 'appointment_date' in values:
@@ -159,10 +141,10 @@ class fnx_sr_shipping(osv.Model):
                 appt = Date.fromymd(values['appointment_date'][:-2] + '01')
                 appt = appt.replace(delta_month=1)
                 values['appointment_date'] = appt.ymd()
-        return super(fnx_sr_shipping, self).create(cr, uid, values, context=ctx)
+        return super(fnx_sr_shipping, self).create(cr, uid, values, context=context)
 
     def write(self, cr, uid, ids, values, context=None):
-        context = (context or {}).copy()
+        context = context
         if isinstance(ids, (int, long)):
             ids = [ids]
         follower_ids = values.pop('message_follower_ids', [])
@@ -186,7 +168,7 @@ class fnx_sr_shipping(osv.Model):
                     raise ERPError('Invalid Operation', 'This order has been cancelled.')
                 if uncancel:
                     del vals['state']
-                proposed = Proposed(self, cr, values, record)
+                proposed = Proposed(self, cr, values, record, context=context)
                 # appt -> scheduled
                 if proposed.appointment and proposed.pallets:
                     state = 'ready'
