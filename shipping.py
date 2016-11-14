@@ -190,7 +190,10 @@ class fnx_sr_shipping(osv.Model):
         return super(fnx_sr_shipping, self).write(cr, uid, ids, values, context=context)
 
     def onchange_appointment(self, cr, uid, ids, appt_date, appt_time, context=None):
-        return {'value': construct_datetime(appt_date, appt_time)}
+        return {'value': {
+                    'appointment': construct_datetime(appt_date, appt_time),
+                    },
+                    }
 
     def sr_checkin(self, cr, uid, ids, context=None):
         ctx = (context or {}).copy()
