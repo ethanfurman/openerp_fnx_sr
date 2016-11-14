@@ -98,6 +98,7 @@
                     ~group
                         ~group
                             @carrier_id options="{'create':False, 'create_edit':False, 'limit':15}"
+                        ~group
                             @appointment_date
                             @appointment_time widget='float_time'
                     ~footer

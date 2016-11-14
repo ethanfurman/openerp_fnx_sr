@@ -190,36 +190,7 @@ class fnx_sr_shipping(osv.Model):
         return super(fnx_sr_shipping, self).write(cr, uid, ids, values, context=context)
 
     def onchange_appointment(self, cr, uid, ids, appt_date, appt_time, context=None):
-        value = {'appointment': False}
-        res = {'value': value}
-        # XXX: change this hardcoded time zone after all users verified to not be in UTC
-        # and res.users no longer has UTC as the default time zone
-        # user_tz = timezone(get_user_timezone(self, cr, uid)[uid])
-        user_tz = timezone('America/Los_Angeles')
-        utc = timezone('UTC')
-        date = time = None
-        if not user_tz:
-            return {
-                    'warning': {
-                        'title': 'Missing Time Zone',
-                        'message': 'You must have your time zone set.\n'
-                                   'Check your preferences (click on your name in the upper-right corner)',
-                        },
-                    }
-        if appt_date:
-            # will never see an invalid date due to javascript library
-            date = Date(appt_date)
-        if appt_time:
-            # may see an invalid time
-            try:
-                time = Time.fromfloat(appt_time)
-            except:
-                raise ERPError('Invalid Time', 'Time should be between 0:00 and 23:59 (not %s)' % appt_time)
-        if date and time:
-            dt = DateTime.combine(date, time).datetime()
-            dt = user_tz.normalize(user_tz.localize(dt)).astimezone(utc)
-            value['appointment'] = dt.strftime(DEFAULT_SERVER_DATETIME_FORMAT)
-        return res
+        return {'value': construct_datetime(appt_date, appt_time)}
 
     def sr_checkin(self, cr, uid, ids, context=None):
         ctx = (context or {}).copy()
@@ -382,6 +353,7 @@ class fnx_sr_shipping_schedule_appt(osv.osv_memory):
         # save to values dict
         values['appointment_date'] = record.appointment_date
         values['appointment_time'] = record.appointment_time
+        values['appointment'] = construct_datetime(record.appointment_date, record.appointment_time)
         values['carrier_id'] = record.carrier_id.id
         # update records in active_model
         return sr.write(cr, uid, order_ids, values, context=context)
@@ -410,6 +382,36 @@ class fnx_sr_shipping_checkout(osv.osv_memory):
         sr = self.pool.get('fnx.sr.shipping')
         return sr.sr_checkout(cr, uid, order_ids, context=context)
 fnx_sr_shipping_checkout()
+
+
+def construct_datetime(appt_date, appt_time):
+    # XXX: change this hardcoded time zone after all users verified to not be in UTC
+    # and res.users no longer has UTC as the default time zone
+    # user_tz = timezone(get_user_timezone(self, cr, uid)[uid])
+    user_tz = timezone('America/Los_Angeles')
+    utc = timezone('UTC')
+    date = time = None
+    if appt_date:
+        # will never see an invalid date due to javascript library
+        date = Date(appt_date)
+    if appt_time:
+        # may see an invalid time
+        try:
+            time = Time.fromfloat(appt_time)
+        except:
+            raise ERPError('Invalid Time', 'Time should be between 0:00 and 23:59 (not %s)' % appt_time)
+    if date and time:
+        # we have all the pieces, make a datetime
+        dt = DateTime.combine(date, time).datetime()
+        dt = user_tz.normalize(user_tz.localize(dt)).astimezone(utc)
+        datetime = dt.strftime(DEFAULT_SERVER_DATETIME_FORMAT)
+    elif date or time:
+        # we only have one piece -- raise
+        raise ERPError('Invalid Date/Time', 'Either both Daet and Time should be specified, or neither')
+    else:
+        datetime = False
+    _logger.info('fnx_sr::onchange_appointment  <-- %r %r  --> %s' % (appt_date, appt_time, datetime))
+    return datetime
 
 
 # get order --> Draft
