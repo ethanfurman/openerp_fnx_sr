@@ -2,9 +2,11 @@
 from __future__ import print_function
 
 from collections import defaultdict
+from dbf import Date, DateTime, Time
 from pandaemonium import PidLockFile, AlreadyLocked
+from pytz import timezone
 from scandir import scandir
-from scription import Script, Command, Main, OrmFile, mail, REQUIRED, OPTION, MULTI
+from scription import Script, Command, Main, OrmFile, mail, REQUIRED, OPTION, MULTI, echo, ProgressView
 from scription import *
 from syslog import syslog
 from VSS import Date, DateTime
@@ -12,9 +14,8 @@ from VSS.BBxXlate.fisData import fisData
 from VSS.path import Path
 from VSS.time_machine import PropertyDict
 from VSS.utils import ProgressBar, Enum, IntEnum, AutoEnum
-from VSS.openerp import get_records
 import logging
-import openerplib
+from openerplib import get_connection, get_records
 import shutil
 import socket
 import time
@@ -464,6 +465,14 @@ def reprocess_missing(date):
 
 
 @Command(
+        what=Spec('what to synchronize', choices=['appt']),
+        )
+def sync(what):
+    if what == 'appt':
+        sync_appts()
+
+
+@Command(
         file=('order to add/update in system', OPTION, 'f', Path),
         directory=('directory of orders to add/update in system', OPTION, 'd', Path),
         )
@@ -583,6 +592,34 @@ def archive(src_file, dest=ARCHIVE):
         dst_file += '_%02d' % count
     shutil.move(src_file, dst_file)
 
+def construct_datetime(appt_date, appt_time):
+    # XXX: change this hardcoded time zone after all users verified to not be in UTC
+    # and res.users no longer has UTC as the default time zone
+    # user_tz = timezone(get_user_timezone(self, cr, uid)[uid])
+    user_tz = timezone('America/Los_Angeles')
+    utc = timezone('UTC')
+    date = time = None
+    if appt_date:
+        # will never see an invalid date due to javascript library
+        date = Date(appt_date)
+    if appt_time:
+        # may see an invalid time
+        try:
+            time = Time.fromfloat(appt_time)
+        except:
+            raise ValueError('Invalid Time', 'Time should be between 0:00 and 23:59 (not %s)' % appt_time)
+    if date and time:
+        # we have all the pieces, make a datetime
+        dt = DateTime.combine(date, time).datetime()
+    elif date:
+        # we have a date, set time to midnight
+        dt = DateTime.combine(date, Time(0)).datetime()
+    else:
+        raise ValueError('Invalid Date/Time', 'Either both Date and Time should be specified, or neither')
+    dt = user_tz.normalize(user_tz.localize(dt)).astimezone(utc)
+    datetime = dt.strftime(DEFAULT_SERVER_DATETIME_FORMAT)
+    return datetime
+
 def get_order(order):
     g = {}
     try:
@@ -592,6 +629,32 @@ def get_order(order):
     if 'order' not in g:
         raise BadFormat('empty file?')
     return PropertyDict(g['order'])
+
+def sync_appts():
+    connect_oe(HOST, DB, USER, PW)
+    print('looking up shipping records with date/time but no appt...')
+    targets = OE.fnx_shipping.search_read(
+            fields=['id', 'appointment', 'appointment_date', 'appointment_time'],
+            domain=[
+                ('appointment','=',False),
+                ('appointment_date','!=',False),
+                ],
+            )
+    progress = ProgressView(len(targets), 'bar', 'sorting %d records' % len(targets))
+    pool = defaultdict(list)
+    for t in targets:
+        progress.tick()
+        pool[t.appointment_date, t.appointment_time].append(t.id)
+    progress = ProgressView(len(pool), 'bar', 'updating %d groups' % len(pool))
+    for date_time, ids in pool.items():
+        progress.tick()
+        date, time = date_time
+        try:
+            appt = construct_datetime(date, time)
+        except ValueError:
+            error('invalid date/time: %s %s.  skipping %d records' % (date, time, len(ids)))
+            continue
+        OE.fnx_shipping.write(ids, {'appointment': appt}, context={'message_track': False})
 
 def update_order(values):
     # carrier is the shipping agent
@@ -691,7 +754,7 @@ def get_files(source=SOURCE):
     return files
 
 def connect_oe(hostname, database, user, password):
-    OE.conn = conn = openerplib.get_connection(hostname=hostname, database=database, login=user, password=password)
+    OE.conn = conn = get_connection(hostname=hostname, database=database, login=user, password=password)
     OE.res_partner = conn.get_model('res.partner')
     OE.res_users = conn.get_model('res.users')
     OE.fnx_shipping = conn.get_model('fnx.sr.shipping')
@@ -733,6 +796,11 @@ class F54(str, Enum):
     fin_charge            = 'In$(33,1)'      # Fin Charge(CR=yes,N=no)
     comment               = 'In$(34,10)'     # Comment
 
+DEFAULT_SERVER_DATE_FORMAT = "%Y-%m-%d"
+DEFAULT_SERVER_TIME_FORMAT = "%H:%M:%S"
+DEFAULT_SERVER_DATETIME_FORMAT = "%s %s" % (
+    DEFAULT_SERVER_DATE_FORMAT,
+    DEFAULT_SERVER_TIME_FORMAT)
 
 
 Main()
