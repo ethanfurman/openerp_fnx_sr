@@ -410,10 +410,9 @@ def construct_datetime(appt_date, appt_time):
         datetime = dt.strftime(DEFAULT_SERVER_DATETIME_FORMAT)
     elif date or time:
         # we only have one piece -- raise
-        raise ERPError('Invalid Date/Time', 'Either both Daet and Time should be specified, or neither')
+        raise ERPError('Invalid Date/Time', 'Either both Date and Time should be specified, or neither')
     else:
         datetime = False
-    _logger.info('fnx_sr::onchange_appointment  <-- %r %r  --> %s' % (appt_date, appt_time, datetime))
     return datetime
 
 
