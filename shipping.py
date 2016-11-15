@@ -403,14 +403,13 @@ def construct_datetime(appt_date, appt_time):
             time = Time.fromfloat(appt_time)
         except:
             raise ERPError('Invalid Time', 'Time should be between 0:00 and 23:59 (not %s)' % appt_time)
-    if date and time:
+    else:
+        time = Time(0)
+    if date:
         # we have all the pieces, make a datetime
         dt = DateTime.combine(date, time).datetime()
         dt = user_tz.normalize(user_tz.localize(dt)).astimezone(utc)
         datetime = dt.strftime(DEFAULT_SERVER_DATETIME_FORMAT)
-    elif date or time:
-        # we only have one piece -- raise
-        raise ERPError('Invalid Date/Time', 'Either both Date and Time should be specified, or neither')
     else:
         datetime = False
     return datetime
