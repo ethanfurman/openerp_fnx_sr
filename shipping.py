@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 
 from collections import OrderedDict
-from dbf import RelativeDay
+from dbf import Date, DateTime, Time, RelativeDay
 from openerp import SUPERUSER_ID
 from openerp.osv import fields, osv
 from openerp.osv.osv import except_osv as ERPError
 from openerp.tools import DEFAULT_SERVER_DATETIME_FORMAT
-from fnx import Date, DateTime, Time, float, all_equal
+from VSS.utils import float, all_equal
 from fnx.oe import Proposed
 from pytz import timezone
 import logging
