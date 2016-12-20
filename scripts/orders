@@ -3,17 +3,18 @@ from __future__ import print_function
 
 from collections import defaultdict
 from dbf import Date, DateTime, Time
+from enum import IntEnum
 from pandaemonium import PidLockFile, AlreadyLocked
 from pytz import timezone
 from scandir import scandir
 from scription import Script, Command, Main, OrmFile, mail, REQUIRED, OPTION, MULTI, echo, ProgressView
 from scription import *
 from syslog import syslog
-from VSS import Date, DateTime
 from VSS.BBxXlate.fisData import fisData
-from VSS.path import Path
+from antipathy import Path
 from VSS.time_machine import PropertyDict
-from VSS.utils import ProgressBar, Enum, IntEnum, AutoEnum
+from VSS.utils import ProgressBar
+from VSS.constants import Enum, AutoEnum
 import logging
 from openerplib import get_connection, get_records
 import shutil
