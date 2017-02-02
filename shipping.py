@@ -141,6 +141,7 @@ class fnx_sr_shipping(osv.Model):
                 appt = Date.fromymd(values['appointment_date'][:-2] + '01')
                 appt = appt.replace(delta_month=1)
                 values['appointment_date'] = appt.ymd()
+            values['appointment'] = construct_datetime(appt, 0)
         return super(fnx_sr_shipping, self).create(cr, uid, values, context=context)
 
     def write(self, cr, uid, ids, values, context=None):
@@ -156,6 +157,14 @@ class fnx_sr_shipping(osv.Model):
             follower_ids.append(partner.id)
         if follower_ids:
             values['message_follower_ids'] = follower_ids
+        if 'appointment_date' in values and 'appointment' not in values:
+            try:
+                appt = Date.fromymd(values['appointment_date'])
+            except ValueError:
+                appt = Date.fromymd(values['appointment_date'][:-2] + '01')
+                appt = appt.replace(delta_month=1)
+                values['appointment_date'] = appt.ymd()
+            values['appointment'] = construct_datetime(appt, values.get('appointment_time', 0))
         if ids and ('state' not in values or values['state'] == 'uncancel'):
             for record in self.browse(cr, SUPERUSER_ID, ids, context=context):
                 # calculate the current state based on the data changes
@@ -360,7 +369,6 @@ class fnx_sr_shipping_schedule_appt(osv.osv_memory):
         values['carrier_id'] = record.carrier_id.id
         # update records in active_model
         return sr.write(cr, uid, order_ids, values, context=context)
-fnx_sr_shipping_schedule_appt()
 
 class fnx_sr_shipping_checkin(osv.osv_memory):
     _name = 'fnx.sr.shipping.checkin'
@@ -372,7 +380,6 @@ class fnx_sr_shipping_checkin(osv.osv_memory):
         order_ids = context['active_ids']
         sr = self.pool.get('fnx.sr.shipping')
         return sr.sr_checkin(cr, uid, order_ids, context=context)
-fnx_sr_shipping_checkin()
 
 class fnx_sr_shipping_checkout(osv.osv_memory):
     _name = 'fnx.sr.shipping.checkout'
@@ -384,7 +391,6 @@ class fnx_sr_shipping_checkout(osv.osv_memory):
         order_ids = context['active_ids']
         sr = self.pool.get('fnx.sr.shipping')
         return sr.sr_checkout(cr, uid, order_ids, context=context)
-fnx_sr_shipping_checkout()
 
 
 def construct_datetime(appt_date, appt_time):
