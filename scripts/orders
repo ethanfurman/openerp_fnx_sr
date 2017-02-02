@@ -7,14 +7,12 @@ from enum import IntEnum
 from pandaemonium import PidLockFile, AlreadyLocked
 from pytz import timezone
 from scandir import scandir
-from scription import Script, Command, Main, OrmFile, mail, REQUIRED, OPTION, MULTI, echo, ProgressView
 from scription import *
-from syslog import syslog
 from VSS.BBxXlate.fisData import fisData
 from antipathy import Path
 from VSS.time_machine import PropertyDict
 from VSS.utils import ProgressBar
-from VSS.constants import Enum, AutoEnum
+from VSS.constants import Enum
 import logging
 from openerplib import get_connection, get_records
 import shutil
@@ -46,6 +44,9 @@ else:
     USER = settings.user
     DB = settings.db
     PW = settings.pw
+
+# set later
+draft = scheduled = appt = ready = checked_in = complete = cancelled = None
 
 @Script(
         host=('host where OpenERP instance is running', OPTION),
@@ -120,7 +121,7 @@ def find_duplicates(remove=False):
                     removed.append(d0.local_source_document)
                     removed_ids.append(d0.id)
                 else:
-                    d0_id = d0.pop('id')
+                    d0.pop('id')
                     d1_id = d1.pop('id')
                     d0.pop('message_ids')
                     d1.pop('message_ids')
@@ -509,19 +510,13 @@ def update(file, directory=SOURCE):
         if not files:
             lock.release()
             return
-    for _ in range(30):
-        # keep trying to get a connection for 30 minutes
-        try:
-            connect_oe(HOST, DB, USER, PW)
-            break
-        except socket.error:
-            time.sleep(60)
-    else:
+    try:
+        connect_oe(HOST, DB, USER, PW)
+    except socket.error:
         if lock:
             lock.release()
-        return
+        raise SystemExit('unable to connect to OpenERP server')
     try:
-        retry = []
         failed = []
         failures = False
         for group in ((files, failed), ):
@@ -692,7 +687,7 @@ def update_order(values):
             OE.res_partner.fis_updates(partner=partner_xmlid)
             records = OE.res_partner.search_read(fields=['id', 'module', 'xml_id'], domain=[('module','=',fis_module[values.direction]),('xml_id','=',partner_xmlid)])
             if not records:
-                raise MissingPartner('unable to find partner %r' % partner_xmlid)
+                raise MissingPartner('unable to find partner %r in OpenERP' % partner_xmlid)
         partner_id = records[0]['id']
         values.partner_id = context.default_partner_id =  partner_id
     carrier_xmlid = values.pop('carrier_xmlid', None)
@@ -701,7 +696,7 @@ def update_order(values):
         if not records:
             records = OE.res_partner.search_read(fields=['id'], domain=[('module','=',fis_module['carrier']),('xml_id','=','99')])
             if not records:
-                raise MissingPartner('unable to find carrier %r' % carrier_xmlid)
+                raise MissingPartner('unable to find carrier %r in OpenERP' % carrier_xmlid)
         carrier_id = records[0]['id']
         values.carrier_id = carrier_id
     direction = values.get('direction')
