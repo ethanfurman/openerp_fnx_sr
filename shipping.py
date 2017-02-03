@@ -186,7 +186,7 @@ class fnx_sr_shipping(osv.Model):
                     state = 'loading'
                 # -> transit (not implemented)
                 # checkout -> complete
-                if proposed.check_out:
+                if proposed.check_out or old_state == 'complete':
                     state = 'complete'
                 # -> cancelled (doesn't happen here)
                 # 
