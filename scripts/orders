@@ -501,6 +501,8 @@ def update(file, directory=SOURCE):
         files = [file]
         lock = None
     else:
+        if not directory.exists():
+            abort('%s does not exist')
         try:
             lock = PidLockFile('/var/run/fnxsr-order_update.pid', timeout=30)
             lock.seal()
