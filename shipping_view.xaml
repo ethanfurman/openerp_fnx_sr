@@ -20,7 +20,7 @@
             @model: fnx.sr.shipping
             @priority eval='10'
             @arch type='xml'
-                ~tree $Tree_View create='false' toolbar='1'
+                ~tree $Tree_View create='false' toolbar='1' default_order='appointment, carrier_id'
                     @direction
                     @carrier_id
                     @appointment
