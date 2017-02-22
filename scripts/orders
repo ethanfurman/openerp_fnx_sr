@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+
+# setup
 from __future__ import print_function
 
 from collections import defaultdict
@@ -9,6 +11,7 @@ from pytz import timezone
 from scandir import scandir
 from scription import *
 from VSS.BBxXlate.fisData import fisData
+from VSS.utils import grouped
 from antipathy import Path
 from VSS.time_machine import PropertyDict
 from VSS.utils import ProgressBar
@@ -48,6 +51,7 @@ else:
 # set later
 draft = scheduled = appt = ready = checked_in = complete = cancelled = None
 
+# API
 @Script(
         host=('host where OpenERP instance is running', OPTION),
         db=('database to use', OPTION),
@@ -467,11 +471,13 @@ def reprocess_missing(date):
 
 
 @Command(
-        what=Spec('what to synchronize', choices=['appt']),
+        what=Spec('what to synchronize', choices=['appt', 'status']),
         )
 def sync(what):
     if what == 'appt':
         sync_appts()
+    elif what == 'status':
+        sync_statusi()
 
 
 @Command(
@@ -553,6 +559,7 @@ def update(file, directory=SOURCE):
             lock.release()
 
 
+# helpers
 OE = PropertyDict()
 
 fis_module = {
@@ -654,6 +661,33 @@ def sync_appts():
             continue
         OE.fnx_shipping.write(ids, {'appointment': appt}, context={'message_track': False})
 
+def sync_statusi():
+    """
+    updates status to complete/canceled
+    """
+    connect_oe(HOST, DB, USER, PW)
+    orders = fisData(36, subset='10%6s')
+    open_orders = OE.fnx_shipping.search_read(
+            fields=['id', 'local_source_document', 'state'],
+            domain=[('state','not in', ['cancelled', 'complete'])],
+            )
+    completed = {}
+    for order in open_orders:
+        found = orders.get_subset(order.local_source_document)
+        if found:
+            print('document %s: %r' % (order.local_source_document, sorted([r[1][3] for r in found])))
+        else:
+            completed[order.id] = order.local_source_document
+    if completed:
+        progress = ProgressView(len(completed), 'bar', 'updating order state')
+        count = 0
+        for ids in grouped(completed.keys(), 100):
+            count += 100
+            OE.fnx_shipping.write(ids, {'state': 'complete'})
+            progress.progress(count)
+    echo('completed %d orders' % len(completed))
+
+
 def update_order(values):
     # carrier is the shipping agent
     # partner is the vendor/customer
@@ -683,19 +717,31 @@ def update_order(values):
         values.message_follower_ids = [lc['partner_id'][0] for lc in records]
     partner_xmlid = values.pop('partner_xmlid', None)
     if partner_xmlid is not None:
-        records = OE.res_partner.search_read(fields=['id', 'module', 'xml_id'], domain=[('module','=',fis_module[values.direction]),('xml_id','=',partner_xmlid)])
+        records = OE.res_partner.search_read(
+                fields=['id', 'module', 'xml_id'],
+                domain=[('module','=',fis_module[values.direction]),('xml_id','=',partner_xmlid)],
+                )
         if not records:
             OE.res_partner.fis_updates(partner=partner_xmlid)
-            records = OE.res_partner.search_read(fields=['id', 'module', 'xml_id'], domain=[('module','=',fis_module[values.direction]),('xml_id','=',partner_xmlid)])
+            records = OE.res_partner.search_read(
+                    fields=['id', 'module', 'xml_id'],
+                    domain=[('module','=',fis_module[values.direction]),('xml_id','=',partner_xmlid)],
+                    )
             if not records:
                 raise MissingPartner('unable to find partner %r in OpenERP' % partner_xmlid)
         partner_id = records[0]['id']
         values.partner_id = context.default_partner_id =  partner_id
     carrier_xmlid = values.pop('carrier_xmlid', None)
     if carrier_xmlid not in (None, ):
-        records = OE.res_partner.search_read(fields=['id'], domain=[('module','=',fis_module['carrier']),('xml_id','=',carrier_xmlid)])
+        records = OE.res_partner.search_read(
+                fields=['id'],
+                domain=[('module','=',fis_module['carrier']),('xml_id','=',carrier_xmlid)],
+                )
         if not records:
-            records = OE.res_partner.search_read(fields=['id'], domain=[('module','=',fis_module['carrier']),('xml_id','=','99')])
+            records = OE.res_partner.search_read(
+                    fields=['id'],
+                    domain=[('module','=',fis_module['carrier']),('xml_id','=','99')],
+                    )
             if not records:
                 raise MissingPartner('unable to find carrier %r in OpenERP' % carrier_xmlid)
         carrier_id = records[0]['id']
@@ -711,9 +757,15 @@ def update_order(values):
         values.pallets = int(values.pallets) or False
     if 'weight' in values:
         values.weight = float(values.weight) or False
-    orders = OE.fnx_shipping.search_read(fields=['id'], domain=[('local_source_document','=',values.local_source_document)])
+    orders = OE.fnx_shipping.search_read(
+            fields=['id'],
+            domain=[('local_source_document','=',values.local_source_document)],
+            )
     if len(orders) > 1:
-        raise ValueError('found more than one order matching %r: %r' % (values.local_source_document, [r.id for r in orders]))
+        raise ValueError(
+                'found more than one order matching %r: %r'
+                % (values.local_source_document, [r.id for r in orders])
+                )
     elif len(orders) == 1:
         order = orders[0]
     else:
