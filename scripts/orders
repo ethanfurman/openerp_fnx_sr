@@ -665,13 +665,17 @@ def sync_statusi():
     """
     updates status to complete/canceled
     """
+    print('connecting to OpenERP')
     connect_oe(HOST, DB, USER, PW)
+    print('gathering orders from FIS')
     orders = fisData(36, subset='10%6s')
+    print('gathering orders from OpenERP')
     open_orders = OE.fnx_shipping.search_read(
             fields=['id', 'local_source_document', 'state'],
             domain=[('state','not in', ['cancelled', 'complete'])],
             )
     completed = {}
+    print('sorting OpenERP documents')
     for order in open_orders:
         found = orders.get_subset(order.local_source_document)
         if found:
@@ -679,13 +683,13 @@ def sync_statusi():
         else:
             completed[order.id] = order.local_source_document
     if completed:
-        progress = ProgressView(len(completed), 'bar', 'updating order state')
+        progress = ProgressView(len(completed), 'bar', 'updating state on OpenERP orders')
         count = 0
         for ids in grouped(completed.keys(), 100):
             count += 100
             OE.fnx_shipping.write(ids, {'state': 'complete'})
             progress.progress(count)
-    echo('completed %d orders' % len(completed))
+    echo('updated %d orders' % len(completed))
 
 
 def update_order(values):
