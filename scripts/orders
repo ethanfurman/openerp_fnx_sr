@@ -472,12 +472,13 @@ def reprocess_missing(date):
 
 @Command(
         what=Spec('what to synchronize', choices=['appt', 'status']),
+        show_missing=Spec('show missing orders when syncing status', FLAG, 'm'),
         )
-def sync(what):
+def sync(what, show_missing):
     if what == 'appt':
         sync_appts()
     elif what == 'status':
-        sync_statusi()
+        sync_statusi(show_missing)
 
 
 @Command(
@@ -661,7 +662,7 @@ def sync_appts():
             continue
         OE.fnx_shipping.write(ids, {'appointment': appt}, context={'message_track': False})
 
-def sync_statusi():
+def sync_statusi(show_missing):
     """
     updates status to complete/canceled
     """
@@ -669,27 +670,134 @@ def sync_statusi():
     connect_oe(HOST, DB, USER, PW)
     print('gathering orders from FIS')
     orders = fisData(36, subset='10%6s')
+    print('gathering purchases from FIS')
+    purchases = fisData(219, subset='10%5s')
     print('gathering orders from OpenERP')
-    open_orders = OE.fnx_shipping.search_read(
+    open_invoices = OE.fnx_shipping.search_read(
             fields=['id', 'local_source_document', 'state'],
-            domain=[('state','not in', ['cancelled', 'complete'])],
+            domain=[('state','not in', ['cancelled', 'complete']),('direction','=','outgoing')],
+            )
+    open_purchases = OE.fnx_shipping.search_read(
+            fields=['id', 'local_source_document', 'state'],
+            domain=[('state','not in', ['cancelled', 'complete']),('direction','=','incoming')],
+            )
+    closed_invoices = OE.fnx_shipping.search_read(
+            fields=['id', 'local_source_document', 'state'],
+            domain=[('state','in', ['cancelled', 'complete']),('direction','=','outgoing'),('check_out','=',False)],
+            )
+    closed_purchases = OE.fnx_shipping.search_read(
+            fields=['id', 'local_source_document', 'state'],
+            domain=[('state','in', ['cancelled', 'complete']),('direction','=','incoming'),('check_out','=',False)],
             )
     completed = {}
-    print('sorting OpenERP documents')
-    for order in open_orders:
+    cancelled = {}
+    reopen = {}
+    missing_invoices = []
+    missing_purchases = []
+    erp_documents = set()
+    for order in ProgressView(
+            iterable=open_invoices,
+            message='sorting $total invoices',
+            view_type='bar',
+        ):
+        erp_documents.add(order.local_source_document)
         found = orders.get_subset(order.local_source_document)
-        if found:
-            print('document %s: %r' % (order.local_source_document, sorted([r[1][3] for r in found])))
+        for key, record in found:
+            # will only be one record, if any
+            status = record[F36.inv_flag].upper()
+            if status == 'B':
+                continue
+            elif status == 'V':
+                cancelled[order.id] = order.local_source_document
+            break
         else:
             completed[order.id] = order.local_source_document
+    for order in ProgressView(
+            iterable=open_purchases,
+            message='sorting $total purchase orders',
+            view_type='bar',
+        ):
+        erp_documents.add(order.local_source_document)
+        found = purchases.get_subset(order.local_source_document)
+        for key, record in found:
+            reg_flag = record[F219.po_reg_flag].upper()
+            confirmed = record[F219.confirmed_flag].upper()
+            if reg_flag == 'V':
+                cancelled[order.id] = order.local_source_document
+            if confirmed == '3':
+                continue
+            break
+        else:
+            completed[order.id] = order.local_source_document
+    for order in ProgressView(
+            iterable=closed_invoices,
+            message='checking $total completed orders',
+            view_type='bar',
+        ):
+        found = orders.get_subset(order.local_source_document)
+        for key, record in found:
+            # will only be one record, if any
+            status = record[F36.inv_flag].upper()
+            # print('document %s: %r' % (order.local_source_document, status))
+            if status != 'B':
+                continue
+            elif status == 'V':
+                # already closed/cancelled, no need to change anything
+                break
+            else:
+                reopen[order.id] = order.local_source_document
+    for order in ProgressView(
+            iterable=closed_purchases,
+            message='checking $total completed purchase orders',
+            view_type='bar',
+        ):
+        found = purchases.get_subset(order.local_source_document)
+        for key, record in found:
+            reg_flag = record[F219.po_reg_flag].upper()
+            confirmed = record[F219.confirmed_flag].upper()
+            if reg_flag == 'V':
+                # already closed/cancelled, no need to change anything
+                break
+            elif confirmed == '3':
+                continue
+            else:
+                reopen[order.id] = order.local_source_document
+    if cancelled:
+        for ids in ProgressView(iterable=cancelled.keys(), message='cancelling $total orders', view_type='bar'):
+            OE.fnx_shipping.write(ids, {'state': 'cancelled'}, context={'message_track': False})
     if completed:
-        progress = ProgressView(len(completed), 'bar', 'updating state on OpenERP orders')
-        count = 0
-        for ids in grouped(completed.keys(), 100):
-            count += 100
-            OE.fnx_shipping.write(ids, {'state': 'complete'})
-            progress.progress(count)
-    echo('updated %d orders' % len(completed))
+        for ids in grouped(ProgressView(iterable=completed.keys(), message='updating order state', view_type='bar'), 100):
+            OE.fnx_shipping.write(ids, {'state': 'complete'}, context={'message_track': False})
+    if reopen:
+        for ids in ProgressView(iterable=reopen.keys(), message='reopening $total orders', view_type='bar'):
+            OE.fnx_shipping.write(ids, {'state': 'draft'}, context={'message_track': False})
+            OE.fnx_shipping.write(ids, {'state': 'uncancel'}, context={'message_track': False})
+    for record in ProgressView(
+            iterable=orders,
+            message='searching for missing invoices',
+            view_type='bar',
+        ):
+        order_no = record[F36.order_no]
+        if order_no and order_no not in erp_documents:
+            missing_invoices.append(order_no)
+    for record in ProgressView(
+            iterable=purchases,
+            message='searching for missing purchase orders',
+            view_type='bar',
+        ):
+        order_no = record[F219.po_no]
+        if order_no and order_no not in erp_documents:
+            missing_purchases.append(order_no)
+    missing_invoices.sort()
+    missing_purchases.sort()
+    print('completed %d orders' % len(completed))
+    print('cancelled %d orders' % len(cancelled))
+    print('reopened %d orders' % len(reopen))
+    if show_missing:
+        echo()
+        echo('missing invoices:', ', '.join(missing_invoices))
+        echo()
+        echo('missing purchase orders:', ', '.join(missing_purchases))
 
 
 def update_order(values):
@@ -813,41 +921,71 @@ def connect_oe(hostname, database, user, password):
     OE.fnx_shipping = conn.get_model('fnx.sr.shipping')
 
 
-class F54(str, Enum):
+class F36(str, Enum):
     """
-    OPAR - OPEN ACCOUNTS RECEIVABLE FILE MAINTENANC
+    RDERH - OPEN ORDER HEADER MAINTENANCE & INQUIRY
     """
-    company_id            = 'An$(1,2)'       # COMPANY CODE
-    cust_no               = 'An$(3,6)'       # CUSTOMER NO.
-    inv_no                = 'An$(9,6)'       # INVOICE NO.
-    trans_no              = 'An$(15,6)'      # TRANSACTION NO.
-    gross                 = 'An'             # GROSS (INVTY SLS)
-    cash_disc             = 'Bn'             # CASH DISCOUNT
-    other_charges         = 'Cn'             # OTHER CHARGES
-    freight_amt           = 'Dn'             # FREIGHT AMOUNT
-    net_amt               = 'En'             # NET AMOUNT
-    terms_id              = 'Bn$'            # TERMS CODE
-    inv_date              = 'Cn$'            # INVOICE DATE
-    pymt_amt              = 'Fn'             # PAYMENT AMOUNT
-    pymt_date             = 'Dn$'            # PAYMENT DATE
-    disc_taken            = 'Gn'             # Discount Taken
-    other_allwnc_amt      = 'Hn'             # Other Allowance Amount
-    adj_id                = 'In'             # Adjustment Code
-    total_drs             = 'Jn'             # Total Debits
-    total_crs             = 'Kn'             # Total Credits
-    company_id            = 'En$(1,2)'       # Company Code
-    ship_to_id            = 'En$(3,4)'       # Ship to Code
-    cust_po_no            = 'Fn$'            # Customer P.O. Number
-    paid_by_chk_no        = 'Gn$'            # Paid by Check Number
-    gl_acct_for_ar        = 'Hn$'            # G/L Account for A/R
-    terms_date            = 'In$(1,6)'       # Terms Date
-    date_posted           = 'In$(7,6)'       # Date Posted
-    order_date            = 'In$(13,6)'      # Order Date
-    sales_rep             = 'In$(19,4)'      # Sales Rep(from conv)
-    date_shipped          = 'In$(23,6)'      # Date Shipped
-    no_chg_pick_prnt_code = 'In$(29,4)'      # NO CHG,PICK,PRNT,CODE
-    fin_charge            = 'In$(33,1)'      # Fin Charge(CR=yes,N=no)
-    comment               = 'In$(34,10)'     # Comment
+    company_id                   = 'An$(1,2)'      # Company Code
+    order_no                     = 'An$(3,6)'      # Order No
+    release_no                   = 'An$(9,2)'      # Release No
+    type_0000                    = 'An$(11,4)'     # TYPE = '0000'
+    inv_flag                     = 'Kn$(4,1)'      # Invoice Flag
+
+class F219(str, Enum):
+    """
+    POHF - PURCHASE ORDER HEADER FILE
+    """
+    company_id          = 'An$(1,2)'      # COMPANY CODE
+    po_no               = 'An$(3,5)'      # P/O NUMBER
+    release_no          = 'An$(8,2)'      # RELEASE NUMBER
+    supplier_no         = 'Bn$'           # SUPPLIER NUMBER
+    supplier_name       = 'Cn$'           # SUPPLIER NAME
+    addr_line_1         = 'Dn$'           # ADDR LINE 1
+    addr_line_2         = 'En$'           # ADDR LINE 2
+    addr_line_3         = 'Fn$'           # ADDR LINE 3
+    order_placed_by_for = 'Gn$'           # ORDER PLACED BY/FOR
+    order_issued_to     = 'Hn$'           # ORDER ISSUED TO
+    terms               = 'In$'           # TERMS
+    fob                 = 'Jn$'           # F.O.B.
+    po_reg_flag         = 'Kn$(1,1)'      # P/O REG FLAG
+    vouchered           = 'Kn$(2,1)'      # Vouchered (Y/N)
+                                          # (open) Kn$(3,1)
+    print_flag          = 'Kn$(4,1)'      # PRINT FLAG
+                                          # (open) Kn$(5,1)
+    ammended_p_o        = 'Kn$(6,1)'      # Ammended P/O?
+    confirmed_flag      = 'Kn$(7,1)'      # CONFIRMED FLAG
+                                          # (open) Kn$(8,1)
+    po_recvd_complete   = 'Kn$(9,1)'      # P.O. RECVD COMPLETE?
+    terms_id            = 'Kn$(10,1)'     # TERMS CODE
+    taxable             = 'Kn$(11,1)'     # TAXABLE?
+    carrier_id          = 'Kn$(12,2)'     # Carrier Code
+    voucher_no          = 'Kn$(14,6)'     # Voucher Number
+    warehouse           = 'Kn$(20,4)'     # WAREHOUSE (I/C)
+    warehouse           = 'Kn$(24,4)'     # WAREHOUSE (DEL)
+    fob_id              = 'Kn$(28,2)'     # FOB CODE
+    po_type             = 'Kn$(30,2)'     # P/O Type
+    used                = 'Kn$(32,1)'     # Used
+    prod_order          = 'Kn$(33,1)'     # Production Order?
+                                          # (open) Kn$(34,7)
+    order_date          = 'On$(1,6)'      # ORDER DATE
+    eta_date            = 'On$(7,6)'      # ETA DATE
+    date_wanted         = 'Pn$(1,8)'      # DATE WANTED
+    date_ammended       = 'Pn$(9,8)'      # Date Ammended
+    carrier             = 'Qn$'           # CARRIER
+    last_rec_date       = 'Rn$'           # LAST REC DATE
+    disc_types          = 'Sn$(1,3)'      # Discount Types
+    freight_type        = 'Sn$(4,1)'      # Freight Type
+                                          # (open) An
+    total_units         = 'Tn'            # TOTAL UNITS
+    total_weight        = 'Un'            # TOTAL WEIGHT
+    total_amt           = 'Vn'            # TOTAL AMOUNT
+    no_of_lines         = 'Wn'            # Number of Lines
+    operator_id         = 'Xn$'           # Operator Code
+    disc_1_rate_amt     = 'Tt(1)'         # Disc 1 - Rate/Amt
+    disc_2_rate_amt     = 'Tt(2)'         # Disc 2 - Rate/Amt
+    disc_3_rate_amt     = 'Tt(3)'         # Disc 3 - Rate/Amt
+    freight_rate_amt    = 'Tt(4)'         # Freight Rate/Amt
+    no_of_pallets       = 'Tt(5)'         # Number of Pallets
 
 DEFAULT_SERVER_DATE_FORMAT = "%Y-%m-%d"
 DEFAULT_SERVER_TIME_FORMAT = "%H:%M:%S"
