@@ -336,7 +336,8 @@ def purge(dryrun):
         for entry in scandir(folder):
             entry = Path(entry.path)
             stem = entry.filename.split('_')[0]
-            if stem not in live_lsds:
+            days_old = (DateTime.now() - DateTime.fromtimestamp(entry.stat().st_mtime)).days
+            if stem not in live_lsds and days_old > 90:
                 dead_files.append(entry)
     if dryrun:
         print('%d shipped candidates' % len(shipped_orders), verbose=0)
