@@ -642,18 +642,21 @@ def sync_appts():
     targets = OE.fnx_shipping.search_read(
             fields=['id', 'appointment', 'appointment_date', 'appointment_time'],
             domain=[
-                ('appointment','=',False),
                 ('appointment_date','!=',False),
                 ],
             )
-    progress = ProgressView(len(targets), 'bar', 'sorting %d records' % len(targets))
     pool = defaultdict(list)
-    for t in targets:
-        progress.tick()
+    for t in ProgressView(
+            iterable=targets,
+            message='sorting $total records',
+            view_type='bar',
+        ):
         pool[t.appointment_date, t.appointment_time].append(t.id)
-    progress = ProgressView(len(pool), 'bar', 'updating %d groups' % len(pool))
-    for date_time, ids in pool.items():
-        progress.tick()
+    for date_time, ids in ProgressView(
+            iterable=pool.items(),
+            message='updating $total groups',
+            view_type='bar',
+        ):
         date, time = date_time
         try:
             appt = construct_datetime(date, time)
