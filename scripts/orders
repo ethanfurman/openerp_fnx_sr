@@ -842,13 +842,7 @@ def update_order(values):
                 domain=[('module','=',fis_module[values.direction]),('xml_id','=',partner_xmlid)],
                 )
         if not records:
-            OE.res_partner.fis_updates(partner=partner_xmlid)
-            records = OE.res_partner.search_read(
-                    fields=['id', 'module', 'xml_id'],
-                    domain=[('module','=',fis_module[values.direction]),('xml_id','=',partner_xmlid)],
-                    )
-            if not records:
-                raise MissingPartner('unable to find partner %r in OpenERP' % partner_xmlid)
+            raise MissingPartner('unable to find partner %r in OpenERP' % partner_xmlid)
         partner_id = records[0]['id']
         values.partner_id = context.default_partner_id =  partner_id
     carrier_xmlid = values.pop('carrier_xmlid', None)
@@ -858,12 +852,7 @@ def update_order(values):
                 domain=[('module','=',fis_module['carrier']),('xml_id','=',carrier_xmlid)],
                 )
         if not records:
-            records = OE.res_partner.search_read(
-                    fields=['id'],
-                    domain=[('module','=',fis_module['carrier']),('xml_id','=','99')],
-                    )
-            if not records:
-                raise MissingPartner('unable to find carrier %r in OpenERP' % carrier_xmlid)
+            raise MissingPartner('unable to find carrier %r in OpenERP' % carrier_xmlid)
         carrier_id = records[0]['id']
         values.carrier_id = carrier_id
     direction = values.get('direction')
