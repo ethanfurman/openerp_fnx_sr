@@ -650,6 +650,7 @@ def sync_appts():
             fields=['id', 'appointment', 'appointment_date', 'appointment_time'],
             domain=[
                 ('appointment_date','!=',False),
+                ('state','!=','cancelled'),
                 ],
             )
     pool = defaultdict(list)
@@ -767,7 +768,7 @@ def sync_statusi(show_missing):
             confirmed = record[F219.confirmed_flag].upper()
             if reg_flag == 'V' or confirmed == '3':
                 # already closed/cancelled, no need to change anything
-                continue
+                break
             else:
                 reopen[order.id] = order.local_source_document
     if cancelled:
