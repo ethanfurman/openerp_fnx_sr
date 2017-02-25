@@ -529,6 +529,7 @@ def update(file, directory=SOURCE):
     try:
         failed = []
         failures = False
+        bad_orders = []
         for group in ((files, failed), ):
             time.sleep(5)
             trying, failing = group
@@ -542,6 +543,10 @@ def update(file, directory=SOURCE):
                         dest = ARCHIVE
                 except (BadFormat, MissingPartner, ), exc:
                     print('%s: %s' % (file, exc.message or exc.args), file=stderr)
+                    with open(file) as f:
+                        data = '================\n%s\n----------------' % file
+                        data += f.read() + '\n'
+                        bad_orders.append(data)
                     # failing.append('%s: %s' % (file, exc.message or exc.args))
                     dest = ERRORS
                     failures = True
@@ -555,6 +560,7 @@ def update(file, directory=SOURCE):
                     archive(file, dest)
         if failures:
             # raise Exception("Unable to process orders:\n\t%s" % '\n\t'.join(failed))
+            print('\n'.join(bad_orders), file=stderr)
             raise SystemExit(-1)
     finally:
         if lock:
