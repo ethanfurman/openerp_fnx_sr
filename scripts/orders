@@ -738,14 +738,13 @@ def sync_statusi(show_missing):
             message='checking $total completed orders',
             view_type='bar',
         ):
+        erp_documents.add(order.local_source_document)
         found = orders.get_subset(order.local_source_document)
         for key, record in found:
             # will only be one record, if any
             status = record[F36.inv_flag].upper()
             # print('document %s: %r' % (order.local_source_document, status))
-            if status != 'B':
-                continue
-            elif status == 'V':
+            if status in ('B', 'V'):
                 # already closed/cancelled, no need to change anything
                 break
             else:
@@ -755,14 +754,13 @@ def sync_statusi(show_missing):
             message='checking $total completed purchase orders',
             view_type='bar',
         ):
+        erp_documents.add(order.local_source_document)
         found = purchases.get_subset(order.local_source_document)
         for key, record in found:
             reg_flag = record[F219.po_reg_flag].upper()
             confirmed = record[F219.confirmed_flag].upper()
-            if reg_flag == 'V':
+            if reg_flag == 'V' or confirmed == '3':
                 # already closed/cancelled, no need to change anything
-                break
-            elif confirmed == '3':
                 continue
             else:
                 reopen[order.id] = order.local_source_document
