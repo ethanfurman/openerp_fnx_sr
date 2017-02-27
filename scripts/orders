@@ -474,13 +474,14 @@ def reprocess_missing(date):
 @Command(
         what=Spec('what to synchronize', choices=['appt', 'status']),
         show_missing=Spec('show missing orders when syncing status', FLAG, 'm'),
+        reopen=Spec('reopen closed orders', FLAG),
         orders=Spec('only affect these orders', OPTION),
         )
-def sync(what, show_missing, *orders):
+def sync(what, show_missing, reopen, *orders):
     if what == 'appt':
         sync_appts(orders)
     elif what == 'status':
-        sync_statusi(show_missing, orders)
+        sync_statusi(show_missing, reopen, orders)
 
 
 @Command(
@@ -677,7 +678,7 @@ def sync_appts(orders):
             continue
         OE.fnx_shipping.write(ids, {'appointment': appt}, context={'message_track': False})
 
-def sync_statusi(show_missing, orders):
+def sync_statusi(show_missing, reopen, orders):
     """
     updates status to complete/canceled
     """
@@ -713,7 +714,7 @@ def sync_statusi(show_missing, orders):
             )
     completed = {}
     cancelled = {}
-    reopen = {}
+    reopened = {}
     missing_invoices = []
     missing_purchases = []
     erp_documents = set()
@@ -751,45 +752,46 @@ def sync_statusi(show_missing, orders):
             break
         else:
             completed[order.id] = order.local_source_document
-    for order in ProgressView(
-            iterable=closed_invoices,
-            message='checking $total completed orders',
-            view_type='bar',
-        ):
-        erp_documents.add(order.local_source_document)
-        found = fis_orders.get_subset(order.local_source_document)
-        for key, record in found:
-            # will only be one record, if any
-            status = record[F36.inv_flag].upper()
-            # print('document %s: %r' % (order.local_source_document, status))
-            if status in ('B', 'V'):
-                # already closed/cancelled, no need to change anything
-                break
-            else:
-                reopen[order.id] = order.local_source_document
-    for order in ProgressView(
-            iterable=closed_purchases,
-            message='checking $total completed purchase orders',
-            view_type='bar',
-        ):
-        erp_documents.add(order.local_source_document)
-        found = fis_purchases.get_subset(order.local_source_document)
-        for key, record in found:
-            reg_flag = record[F219.po_reg_flag].upper()
-            confirmed = record[F219.confirmed_flag].upper()
-            if reg_flag == 'V' or confirmed == '3':
-                # already closed/cancelled, no need to change anything
-                break
-            else:
-                reopen[order.id] = order.local_source_document
+    if reopen:
+        for order in ProgressView(
+                iterable=closed_invoices,
+                message='checking $total completed orders',
+                view_type='bar',
+            ):
+            erp_documents.add(order.local_source_document)
+            found = fis_orders.get_subset(order.local_source_document)
+            for key, record in found:
+                # will only be one record, if any
+                status = record[F36.inv_flag].upper()
+                # print('document %s: %r' % (order.local_source_document, status))
+                if status in ('B', 'V'):
+                    # already closed/cancelled, no need to change anything
+                    break
+                else:
+                    reopened[order.id] = order.local_source_document
+        for order in ProgressView(
+                iterable=closed_purchases,
+                message='checking $total completed purchase orders',
+                view_type='bar',
+            ):
+            erp_documents.add(order.local_source_document)
+            found = fis_purchases.get_subset(order.local_source_document)
+            for key, record in found:
+                reg_flag = record[F219.po_reg_flag].upper()
+                confirmed = record[F219.confirmed_flag].upper()
+                if reg_flag == 'V' or confirmed == '3':
+                    # already closed/cancelled, no need to change anything
+                    break
+                else:
+                    reopened[order.id] = order.local_source_document
     if cancelled:
         for ids in ProgressView(iterable=cancelled.keys(), message='cancelling $total orders', view_type='bar'):
             OE.fnx_shipping.write(ids, {'state': 'cancelled'}, context={'message_track': False})
     if completed:
         for ids in grouped(ProgressView(iterable=completed.keys(), message='updating order state', view_type='bar'), 100):
             OE.fnx_shipping.write(ids, {'state': 'complete'}, context={'message_track': False})
-    if reopen:
-        for ids in ProgressView(iterable=reopen.keys(), message='reopening $total orders', view_type='bar'):
+    if reopened:
+        for ids in ProgressView(iterable=reopened.keys(), message='reopening $total orders', view_type='bar'):
             OE.fnx_shipping.write(ids, {'state': 'draft'}, context={'message_track': False})
             OE.fnx_shipping.write(ids, {'state': 'uncancel'}, context={'message_track': False})
     for record in ProgressView(
@@ -816,7 +818,8 @@ def sync_statusi(show_missing, orders):
     missing_purchases.sort()
     print('completed %d orders' % len(completed))
     print('cancelled %d orders' % len(cancelled))
-    print('reopened %d orders' % len(reopen))
+    if reopen:
+        print('reopened %d orders' % len(reopened))
     if show_missing:
         echo()
         echo('missing invoices:', ', '.join(missing_invoices))
