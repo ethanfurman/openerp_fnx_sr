@@ -11,7 +11,7 @@ from pytz import timezone
 from scandir import scandir
 from scription import *
 from VSS.BBxXlate.fisData import fisData
-from VSS.utils import grouped
+from VSS.utils import grouped, fix_date, date
 from antipathy import Path
 from VSS.time_machine import PropertyDict
 from VSS.utils import ProgressBar
@@ -472,16 +472,19 @@ def reprocess_missing(date):
 
 
 @Command(
-        what=Spec('what to synchronize', choices=['appt', 'status']),
+        what=Spec('what to synchronize', choices=['erp', 'fis']),
         show_missing=Spec('show missing orders when syncing status', FLAG, 'm'),
         reopen=Spec('reopen closed orders', FLAG),
         orders=Spec('only affect these orders', OPTION),
         )
 def sync(what, show_missing, reopen, *orders):
-    if what == 'appt':
-        sync_appts(orders)
-    elif what == 'status':
-        sync_statusi(show_missing, reopen, orders)
+    '''
+    synchronizes data either within OpenERP or with FIS
+    '''
+    if what == 'erp':
+        sync_openerp(orders)
+    elif what == 'fis':
+        sync_fis(show_missing, reopen, orders)
 
 
 @Command(
@@ -645,7 +648,7 @@ def get_order(order):
         raise BadFormat('empty file?')
     return PropertyDict(g['order'])
 
-def sync_appts(orders):
+def sync_openerp(orders):
     connect_oe(HOST, DB, USER, PW)
     print('looking up shipping records with date/time but no appt...')
     domain=[
@@ -678,9 +681,9 @@ def sync_appts(orders):
             continue
         OE.fnx_shipping.write(ids, {'appointment': appt}, context={'message_track': False})
 
-def sync_statusi(show_missing, reopen, orders):
+def sync_fis(show_missing, reopen, orders):
     """
-    updates status to complete/canceled
+    updates status to complete/cancelled, ship date to FIS
     """
     print('connecting to OpenERP')
     connect_oe(HOST, DB, USER, PW)
@@ -697,7 +700,7 @@ def sync_statusi(show_missing, reopen, orders):
         for dmn in (oi_dmn, op_dmn, ci_dmn, cp_dmn):
             dmn.append(('local_source_document','in',orders))
     open_invoices = OE.fnx_shipping.search_read(
-            fields=['id', 'local_source_document', 'state'],
+            fields=['id', 'appointment_date', 'local_source_document', 'state'],
             domain=oi_dmn,
             )
     open_purchases = OE.fnx_shipping.search_read(
@@ -718,6 +721,7 @@ def sync_statusi(show_missing, reopen, orders):
     missing_invoices = []
     missing_purchases = []
     erp_documents = set()
+    # order status
     for order in ProgressView(
             iterable=open_invoices,
             message='sorting $total invoices',
@@ -788,36 +792,66 @@ def sync_statusi(show_missing, reopen, orders):
         for ids in ProgressView(iterable=cancelled.keys(), message='cancelling $total orders', view_type='bar'):
             OE.fnx_shipping.write(ids, {'state': 'cancelled'}, context={'message_track': False})
     if completed:
-        for ids in grouped(ProgressView(iterable=completed.keys(), message='updating order state', view_type='bar'), 100):
+        for ids in grouped(ProgressView(iterable=completed.keys(), message='updating state for $total orders', view_type='bar'), 100):
             OE.fnx_shipping.write(ids, {'state': 'complete'}, context={'message_track': False})
     if reopened:
         for ids in ProgressView(iterable=reopened.keys(), message='reopening $total orders', view_type='bar'):
             OE.fnx_shipping.write(ids, {'state': 'draft'}, context={'message_track': False})
             OE.fnx_shipping.write(ids, {'state': 'uncancel'}, context={'message_track': False})
-    for record in ProgressView(
-            iterable=fis_orders,
-            message='searching for missing invoices',
+    # dates
+    changed_shipping = 0
+    still_open_invoices = OE.fnx_shipping.search_read(
+            fields=['id', 'appointment_date', 'local_source_document', 'state'],
+            domain=oi_dmn,
+            )
+    for order in ProgressView(
+            iterable=still_open_invoices,
+            message='checking $total invoices for changed dates',
             view_type='bar',
         ):
-        order_no = record[F36.order_no]
-        if orders and order_no not in orders:
-            continue
-        elif order_no and order_no not in erp_documents:
-            missing_invoices.append(order_no)
-    for record in ProgressView(
-            iterable=fis_purchases,
-            message='searching for missing purchase orders',
-            view_type='bar',
-        ):
-        order_no = record[F219.po_no]
-        if orders and order_no not in orders:
-            continue
-        elif order_no and order_no not in erp_documents:
-            missing_purchases.append(order_no)
-    missing_invoices.sort()
-    missing_purchases.sort()
+        found = fis_orders.get_subset(order.local_source_document)
+        for key, record in found:
+            # will only be one record
+            try:
+                fis_ship_date = fix_date(record[F36.ship_date], format='ymd')
+            except ValueError:
+                # bad date skip
+                continue
+            erp_ship_date = date(order.appointment_date)
+            if fis_ship_date is not None and fis_ship_date != erp_ship_date:
+                fis_ship_date = fis_ship_date.strftime('%Y%m%d')
+                changed_shipping += 1
+                OE.fnx_shipping.write(
+                        order.id,
+                        {'appointment_date':fis_ship_date, 'appointment_time': 0},
+                        )
+    # missing orders
+    if show_missing:
+        for record in ProgressView(
+                iterable=fis_orders,
+                message='searching for missing invoices',
+                view_type='bar',
+            ):
+            order_no = record[F36.order_no]
+            if orders and order_no not in orders:
+                continue
+            elif order_no and order_no not in erp_documents:
+                missing_invoices.append(order_no)
+        for record in ProgressView(
+                iterable=fis_purchases,
+                message='searching for missing purchase orders',
+                view_type='bar',
+            ):
+            order_no = record[F219.po_no]
+            if orders and order_no not in orders:
+                continue
+            elif order_no and order_no not in erp_documents:
+                missing_purchases.append(order_no)
+        missing_invoices.sort()
+        missing_purchases.sort()
     print('completed %d orders' % len(completed))
     print('cancelled %d orders' % len(cancelled))
+    print('dates synced with FIS:', changed_shipping)
     if reopen:
         print('reopened %d orders' % len(reopened))
     if show_missing:
@@ -946,6 +980,7 @@ class F36(str, Enum):
     release_no                   = 'An$(9,2)'      # Release No
     type_0000                    = 'An$(11,4)'     # TYPE = '0000'
     inv_flag                     = 'Kn$(4,1)'      # Invoice Flag
+    ship_date                    = 'Mn$(7,6)'      # Ship Date
 
 class F219(str, Enum):
     """
