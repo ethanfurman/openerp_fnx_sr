@@ -938,17 +938,20 @@ def update_order(values):
             raise MissingPartner('unable to find carrier %r in OpenERP' % carrier_xmlid)
         carrier_id = records[0]['id']
         values.carrier_id = carrier_id
-    direction = values.get('direction')
-    if direction == 'incoming':
-        values.job_title = values.preposition = values.partner_source_document_type = 'purchasing'
-    elif direction == 'outgoing':
-        values.job_title = values.preposition = values.partner_source_document_type = 'sales'
     if 'cartons' in values:
         values.cartons = int(values.cartons) or False
     if 'pallets' in values:
         values.pallets = int(values.pallets) or False
     if 'weight' in values:
         values.weight = float(values.weight) or False
+    direction = values.get('direction')
+    if direction is None and values.cartons or values.pallets or values.weight:
+        # only present on outgoing orders
+        direction = 'outgoing'
+    if direction == 'incoming':
+        values.job_title = values.preposition = values.partner_source_document_type = 'purchasing'
+    elif direction == 'outgoing':
+        values.job_title = values.preposition = values.partner_source_document_type = 'sales'
     orders = OE.fnx_shipping.search_read(
             fields=['id'],
             domain=[('local_source_document','=',values.local_source_document)],
