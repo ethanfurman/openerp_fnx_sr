@@ -25,7 +25,7 @@ import xmlrpclib
 
 logging.basicConfig(
         filename='/var/log/openerp/fnx_sr',
-        level=logging.WARNING,
+        level=logging.DEBUG,
         format='%(process)06d %(asctime)s %(name)-25s %(message)s',
         )
 
@@ -70,6 +70,8 @@ def main(host, db, user, pw):
     for req in ('HOST', 'USER', 'DB', 'PW'):
         if not module[req]:
             raise SystemExit('%r required; use --help for more info' % req)
+    global logger
+    logger = logging.getLogger('orders')
 
 @Command(
         remove=('remove identical duplicates', 'flag', ),
@@ -733,11 +735,14 @@ def sync_fis(show_missing, reopen, orders):
             # will only be one record, if any
             status = record[F36.inv_flag].upper()
             if status == 'B':
+                logger.debug('%6s: status -> %r [no action]', order.local_source_document, status)
                 continue
             elif status == 'V':
                 cancelled[order.id] = order.local_source_document
+                logger.debug('%6s: status -> %r [cancelling]', order.local_source_document, status)
             break
         else:
+            logger.debug('%6s: status -> %r [completing]', order.local_source_document, status)
             completed[order.id] = order.local_source_document
     for order in ProgressView(
             iterable=open_purchases,
@@ -750,11 +755,23 @@ def sync_fis(show_missing, reopen, orders):
             reg_flag = record[F219.po_reg_flag].upper()
             confirmed = record[F219.confirmed_flag].upper()
             if reg_flag == 'V':
+                logger.debug(
+                        '%6s: reg_flag -> %r   confirmed -> %r [cancelling]',
+                        order.local_source_document, reg_flag, confirmed,
+                        )
                 cancelled[order.id] = order.local_source_document
             if confirmed == '3':
+                logger.debug(
+                        '%6s: reg_flag -> %r   confirmed -> %r [no action]',
+                        order.local_source_document, reg_flag, confirmed,
+                        )
                 continue
             break
         else:
+            logger.debug(
+                    '%6s: reg_flag -> %r   confirmed -> %r [completing]',
+                    order.local_source_document, reg_flag, confirmed,
+                    )
             completed[order.id] = order.local_source_document
     if reopen:
         for order in ProgressView(
@@ -816,14 +833,27 @@ def sync_fis(show_missing, reopen, orders):
                 fis_ship_date = fix_date(record[F36.ship_date], format='ymd')
             except ValueError:
                 # bad date skip
+                logger.debug(
+                        '%6s: ship-date -> %r [bad data, no action]',
+                        order.local_source_document, record[F36.ship_date],
+                        )
                 continue
             erp_ship_date = date(order.appointment_date)
             if fis_ship_date is not None and fis_ship_date != erp_ship_date:
                 fis_ship_date = fis_ship_date.strftime('%Y%m%d')
                 changed_shipping += 1
+                logger.debug(
+                        '%6s: ship-date -> %r [updating]',
+                        order.local_source_document, fis_ship_date,
+                        )
                 OE.fnx_shipping.write(
                         order.id,
                         {'appointment_date':fis_ship_date, 'appointment_time': 0},
+                        )
+            else:
+                logger.debug(
+                        '%6s: ship-date -> %r [no data, no action]',
+                        order.local_source_document, record[F36.ship_date],
                         )
     # missing orders
     if show_missing:
