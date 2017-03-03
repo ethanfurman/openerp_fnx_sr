@@ -24,7 +24,7 @@ import time
 import xmlrpclib
 
 logging.basicConfig(
-        filename='/var/log/openerp/fnx_sr',
+        filename='/var/log/openerp/fnx_sr.log',
         level=logging.DEBUG,
         format='%(process)06d %(asctime)s %(name)-25s %(message)s',
         )
@@ -78,6 +78,7 @@ def main(host, db, user, pw):
         )
 def find_duplicates(remove=False):
     """Look for duplicate orders; print any found"""
+    logging.info('find_duplicates(remove=%r)', remove)
     connect_oe(HOST, DB, USER, PW)
     records = OE.fnx_shipping.search_read(fields=['id', 'local_source_document'], )
     order_numbers = set()
@@ -151,6 +152,7 @@ def fix_carriers():
     compare OE values for carrier with values in files -- if OE value is '99'
     and file value is not, set to file value
     """
+    logger.info('fix_carriers()')
     connect_oe(HOST, DB, USER, PW)
     records = OE.res_partner.search_read(fields=['id'], domain=[('module','=',fis_module['carrier']),('xml_id','=','99')])
     unknown_id = records[0]['id']
@@ -179,6 +181,7 @@ def fix_carriers():
 
 @Command()
 def info():
+    logger.info('info()')
     print('loading OPAR', verbose=0)
     opar = fisData(54, subset='10%6s%6s')
     print('total OPAR records:', len(opar), verbose=0)
@@ -233,6 +236,7 @@ def info():
 def manual_update(**values):
     # values that need to be converted from str:
     #    local_contact -> list
+    logger.info('manual_update(values=%r)', values)
     connect_oe(HOST, DB, USER, PW)
     lc = values.pop('local_contact', None)
     if lc is not None:
@@ -242,6 +246,7 @@ def manual_update(**values):
 
 @Command()
 def missing_check():
+    logger.info('missing_check()')
     connect_oe(HOST, DB, USER, PW)
     orders = dict(
             (item.local_source_document, item)
@@ -266,6 +271,7 @@ def purge(dryrun):
     - receiving, complete, and more than 6 months old; or
     - more than 1 year old
     """
+    logger.info('purge(dryrun=%r)', dryrun)
     print('connecting to %s:%s' % (HOST, DB))
     connect_oe(HOST, DB, USER, PW)
     print('loading OPAR')
@@ -373,6 +379,7 @@ def purge(dryrun):
         date=('reprocess all files from <date>', MULTI, 'd', Date, ),
         )
 def reprocess(file_to_process, date):
+    logger.info('reprocess(file_to_process=%r, date=%r', file_to_process, date)
     if not (file_to_process or date):
         raise SystemExit('either file(s) or date(s) must be specified')
     if file_to_process:
@@ -399,6 +406,7 @@ def reprocess_error():
     goes through the errors directory and reprocesses any orders that are
     either missing or still open
     """
+    logger.info('reprocess_error()')
     connect_oe(HOST, DB, USER, PW)
     print('gathering orders from OpenERP...')
     orders = dict(
@@ -430,6 +438,7 @@ def reprocess_error():
         date=('start date for missing orders', REQUIRED, 'd', Date),
         )
 def reprocess_missing(date):
+    logger.info('reprocess_missing(date=%r)', date)
     connect_oe(HOST, DB, USER, PW)
     print('gathering orders from OpenERP...',)
     orders = dict(
@@ -483,6 +492,7 @@ def sync(what, show_missing, reopen, *orders):
     '''
     synchronizes data either within OpenERP or with FIS
     '''
+    logger.info('sync(what=%r, show_missing=%r, reopen=%r, orders=%r)', what, show_missing, reopen, orders)
     if what == 'erp':
         sync_openerp(orders)
     elif what == 'fis':
@@ -512,6 +522,7 @@ def update(file, directory=SOURCE):
 
     to OpenERP.FnxSR.
     """
+    logger.info('update(file=%r, directory=%r', file, directory)
     if file:
         files = [file]
         lock = None
