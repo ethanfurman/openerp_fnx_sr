@@ -746,11 +746,12 @@ def sync_fis(show_missing, reopen, orders):
             # will only be one record, if any
             status = record[F36.inv_flag].upper()
             if status == 'B':
-                logger.debug('%6s: status -> %r [no action]', order.local_source_document, status)
                 continue
             elif status == 'V':
                 cancelled[order.id] = order.local_source_document
                 logger.debug('%6s: status -> %r [cancelling]', order.local_source_document, status)
+            else:
+                logger.debug('%6s: status -> %r [no action]', order.local_source_document, status)
             break
         else:
             logger.debug('%6s: status -> %r [completing]', order.local_source_document, status)
@@ -771,12 +772,13 @@ def sync_fis(show_missing, reopen, orders):
                         order.local_source_document, reg_flag, confirmed,
                         )
                 cancelled[order.id] = order.local_source_document
-            if confirmed == '3':
+            elif confirmed == '3':
+                continue
+            else:
                 logger.debug(
                         '%6s: reg_flag -> %r   confirmed -> %r [no action]',
                         order.local_source_document, reg_flag, confirmed,
                         )
-                continue
             break
         else:
             logger.debug(
