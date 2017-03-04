@@ -820,14 +820,14 @@ def sync_fis(show_missing, reopen, orders):
                     reopened[order.id] = order.local_source_document
     if cancelled:
         for ids in ProgressView(iterable=cancelled.keys(), message='cancelling $total orders', view_type='bar'):
-            OE.fnx_shipping.write(ids, {'state': 'cancelled'}, context={'message_track': False})
+            OE.fnx_shipping.write(ids, {'state': 'cancelled'})  #, context={'message_track': False})
     if completed:
         for ids in grouped(ProgressView(iterable=completed.keys(), message='updating state for $total orders', view_type='bar'), 100):
-            OE.fnx_shipping.write(ids, {'state': 'complete'}, context={'message_track': False})
+            OE.fnx_shipping.write(ids, {'state': 'complete'})  #, context={'message_track': False})
     if reopened:
         for ids in ProgressView(iterable=reopened.keys(), message='reopening $total orders', view_type='bar'):
             OE.fnx_shipping.write(ids, {'state': 'draft'}, context={'message_track': False})
-            OE.fnx_shipping.write(ids, {'state': 'uncancel'}, context={'message_track': False})
+            OE.fnx_shipping.write(ids, {'state': 'uncancel'})  #, context={'message_track': False})
     # dates
     changed_shipping = 0
     still_open_invoices = OE.fnx_shipping.search_read(
