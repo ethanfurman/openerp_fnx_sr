@@ -834,13 +834,9 @@ def sync_fis(show_missing, reopen, orders):
             fields=['id', 'appointment_date', 'local_source_document', 'state'],
             domain=oi_dmn,
             )
-    still_open_purchases = OE.fnx_shipping.search_read(
-            fields=['id', 'local_source_document', 'state'],
-            domain=op_dmn,
-            )
     for order in ProgressView(
-            iterable=(still_open_invoices+still_open_purchases),
-            message='checking $total invoices/purchases for changed dates',
+            iterable=still_open_invoices,
+            message='checking $total invoices for changed dates',
             view_type='bar',
         ):
         found = fis_orders.get_subset(order.local_source_document)
@@ -848,6 +844,44 @@ def sync_fis(show_missing, reopen, orders):
             # will only be one record
             try:
                 fis_ship_date = fix_date(record[F36.ship_date], format='ymd')
+            except ValueError:
+                # bad date skip
+                logger.debug(
+                        '%6s: ship-date -> %r [bad data, no action]',
+                        order.local_source_document, record[F36.ship_date],
+                        )
+                continue
+            erp_ship_date = date(order.appointment_date)
+            if fis_ship_date is not None and fis_ship_date != erp_ship_date:
+                fis_ship_date = fis_ship_date.strftime('%Y%m%d')
+                changed_shipping += 1
+                logger.debug(
+                        '%6s: ship-date -> %r [updating]',
+                        order.local_source_document, fis_ship_date,
+                        )
+                OE.fnx_shipping.write(
+                        order.id,
+                        {'appointment_date':fis_ship_date, 'appointment_time': 0},
+                        )
+            else:
+                logger.debug(
+                        '%6s: ship-date -> %r [no data, no action]',
+                        order.local_source_document, record[F36.ship_date],
+                        )
+    still_open_purchases = OE.fnx_shipping.search_read(
+            fields=['id', 'appointment_date', 'local_source_document', 'state'],
+            domain=op_dmn,
+            )
+    for order in ProgressView(
+            iterable=still_open_purchases,
+            message='checking $total purchases for changed dates',
+            view_type='bar',
+        ):
+        found = fis_purchases.get_subset(order.local_source_document)
+        for key, record in found:
+            # will only be one record
+            try:
+                fis_ship_date = fix_date(record[F219.ship_date], format='ymd')
             except ValueError:
                 # bad date skip
                 logger.debug(
