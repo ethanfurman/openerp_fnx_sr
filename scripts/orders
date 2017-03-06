@@ -834,9 +834,13 @@ def sync_fis(show_missing, reopen, orders):
             fields=['id', 'appointment_date', 'local_source_document', 'state'],
             domain=oi_dmn,
             )
+    still_open_purchases = OE.fnx_shipping.search_read(
+            fields=['id', 'local_source_document', 'state'],
+            domain=op_dmn,
+            )
     for order in ProgressView(
-            iterable=still_open_invoices,
-            message='checking $total invoices for changed dates',
+            iterable=(still_open_invoices+still_open_purchases),
+            message='checking $total invoices/purchases for changed dates',
             view_type='bar',
         ):
         found = fis_orders.get_subset(order.local_source_document)
