@@ -197,8 +197,6 @@ class fnx_sr_shipping(osv.Model):
                 # checkout -> complete
                 if (proposed.check_out or old_state == 'complete') and not reopen:
                     state = 'complete'
-                if old_state == 'cancelled' and not reopen:
-                    state = 'cancelled'
                 # -> cancelled (doesn't happen here)
                 # 
                 if not super(fnx_sr_shipping, self).write(cr, uid, [record.id], vals, context=context):
