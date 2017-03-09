@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+# imports
 from collections import OrderedDict
 from dbf import Date, DateTime, Time, RelativeDay
 from openerp import SUPERUSER_ID
@@ -11,6 +11,8 @@ from fnx.oe import Proposed
 from pytz import timezone
 import logging
 
+# set up
+
 _logger = logging.getLogger(__name__)
 
 
@@ -20,6 +22,8 @@ DIRECTION = {
     }
 
 utc = timezone('UTC')
+
+#tables
 
 class fnx_sr_shipping(osv.Model):
     _name = 'fnx.sr.shipping'
@@ -47,6 +51,11 @@ class fnx_sr_shipping(osv.Model):
     state['fnx_sr.mt_ship_rec_cancelled'] = lambda s, c, u, r, ctx: r['state'] == 'cancelled'
     _track['state'] = state
     del state
+
+    # get order --> Draft
+    # spoken with carrier --> Confirmed (good date)
+    # invoice printed --> pallets
+    # pallet count == has been pulled
 
     def _document_name_get(self, cr, uid, ids, _field, _arg, context=None):
         result = {}
@@ -165,17 +174,17 @@ class fnx_sr_shipping(osv.Model):
                 appt = appt.replace(delta_month=1)
                 values['appointment_date'] = appt.ymd()
             values['appointment'] = construct_datetime(appt, values.get('appointment_time', 0))
-        if ids and ('state' not in values or values['state'] == 'uncancel'):
+        if ids and ('state' not in values or values['state'] == 'reopen'):
             for record in self.browse(cr, SUPERUSER_ID, ids, context=context):
                 # calculate the current state based on the data changes
                 # 
                 vals = values.copy()
                 state = 'draft'
                 old_state = record.state
-                uncancel = values.get('state') == 'uncancel'
-                if old_state == 'cancelled' and not uncancel:
+                reopen = values.get('state') == 'reopen'
+                if old_state == 'cancelled' and not reopen:
                     raise ERPError('Invalid Operation', 'This order has been cancelled.')
-                if uncancel:
+                if reopen:
                     del vals['state']
                 proposed = Proposed(self, cr, values, record, context=context)
                 # appt -> scheduled
@@ -186,8 +195,10 @@ class fnx_sr_shipping(osv.Model):
                     state = 'loading'
                 # -> transit (not implemented)
                 # checkout -> complete
-                if proposed.check_out or old_state == 'complete':
+                if (proposed.check_out or old_state == 'complete') and not reopen:
                     state = 'complete'
+                if old_state == 'cancelled' and not reopen:
+                    state = 'cancelled'
                 # -> cancelled (doesn't happen here)
                 # 
                 if not super(fnx_sr_shipping, self).write(cr, uid, [record.id], vals, context=context):
@@ -268,7 +279,7 @@ class fnx_sr_shipping(osv.Model):
             ids = [ids]
         ctx['mail_create_nosubscribe'] = True
         ctx['message_force'] = 'Manager override: reset to '
-        return self.write(cr, uid, ids, {'state': 'uncancel', 'check_out': False}, context=ctx)
+        return self.write(cr, uid, ids, {'state': 'reopen', 'check_out': False}, context=ctx)
 
     def search(self, cr, user, args=None, offset=0, limit=None, order=None, context=None, count=False):
         # 2013 08 12  (yyyy mm dd)
@@ -421,7 +432,3 @@ def construct_datetime(appt_date, appt_time):
     return datetime
 
 
-# get order --> Draft
-# spoken with carrier --> Confirmed (good date)
-# invoice printed --> pallets
-# pallet count == has been pulled
