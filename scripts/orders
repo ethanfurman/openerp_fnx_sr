@@ -559,7 +559,7 @@ def update(file, directory=SOURCE):
                     else:
                         update_order(order)
                         dest = ARCHIVE
-                except (BadFormat, MissingPartner, ), exc:
+                except (BadFormat, MissingPartner, CancelledOrder), exc:
                     print('%s: %s' % (file, exc.message or exc.args), file=stderr)
                     with open(file) as f:
                         data = '================\n%s\n----------------' % file
@@ -568,7 +568,7 @@ def update(file, directory=SOURCE):
                     # failing.append('%s: %s' % (file, exc.message or exc.args))
                     dest = ERRORS
                     failures = True
-                except (IOError, ), exc:
+                except (Exception, ), exc:
                     print('%s: %s' % (file, exc.message or exc.args), file=stderr)
                     # failing.append('%s: %s' % (file, exc.message or exc.args))
                     dest = None
@@ -609,6 +609,9 @@ class BadFormat(Exception):
 
 class MissingPartner(Exception):
     "unable to find partner"
+
+class CancelledOrder(Exception):
+    "order has been cancelled"
 
 def archive(src_file, dest=ARCHIVE):
     src_file = Path(src_file)
@@ -742,6 +745,7 @@ def sync_fis(show_missing, reopen, orders):
         ):
         erp_documents.add(order.local_source_document)
         found = fis_orders.get_subset(order.local_source_document)
+        status = 'not found'
         for key, record in found:
             # will only be one record, if any
             status = record[F36.inv_flag].upper()
@@ -763,6 +767,8 @@ def sync_fis(show_missing, reopen, orders):
         ):
         erp_documents.add(order.local_source_document)
         found = fis_purchases.get_subset(order.local_source_document)
+        reg_flag = None
+        confirmed = None
         for key, record in found:
             reg_flag = record[F219.po_reg_flag].upper()
             confirmed = record[F219.confirmed_flag].upper()
@@ -878,33 +884,34 @@ def sync_fis(show_missing, reopen, orders):
             view_type='bar',
         ):
         found = fis_purchases.get_subset(order.local_source_document)
+        logger.debug('looking for %s, found %d matches' % (order.local_source_document, len(found)))
         for key, record in found:
             # will only be one record
             try:
-                fis_ship_date = fix_date(record[F219.ship_date], format='ymd')
+                fis_eta_date = fix_date(record[F219.eta_date], format='ymd')
             except ValueError:
                 # bad date skip
                 logger.debug(
                         '%6s: ship-date -> %r [bad data, no action]',
-                        order.local_source_document, record[F36.ship_date],
+                        order.local_source_document, record[F219.eta_date],
                         )
                 continue
-            erp_ship_date = date(order.appointment_date)
-            if fis_ship_date is not None and fis_ship_date != erp_ship_date:
-                fis_ship_date = fis_ship_date.strftime('%Y%m%d')
+            erp_eta_date = date(order.appointment_date)
+            if fis_eta_date is not None and fis_eta_date != erp_eta_date:
+                fis_eta_date = fis_eta_date.strftime('%Y%m%d')
                 changed_shipping += 1
                 logger.debug(
                         '%6s: ship-date -> %r [updating]',
-                        order.local_source_document, fis_ship_date,
+                        order.local_source_document, fis_eta_date,
                         )
                 OE.fnx_shipping.write(
                         order.id,
-                        {'appointment_date':fis_ship_date, 'appointment_time': 0},
+                        {'appointment_date':fis_eta_date, 'appointment_time': 0},
                         )
             else:
                 logger.debug(
                         '%6s: ship-date -> %r [no data, no action]',
-                        order.local_source_document, record[F36.ship_date],
+                        order.local_source_document, record[F219.eta_date],
                         )
     # missing orders
     if show_missing:
@@ -996,7 +1003,7 @@ def update_order(values):
     if 'weight' in values:
         values.weight = float(values.weight) or False
     direction = values.get('direction')
-    if direction is None and values.cartons or values.pallets or values.weight:
+    if direction is None and 'cartons' in values or 'pallets' in values or 'weight' in values:
         # only present on outgoing orders
         direction = 'outgoing'
     if direction == 'incoming':
@@ -1039,6 +1046,9 @@ def update_order(values):
             OE.fnx_shipping.write([order['id']], dict(values))
         except xmlrpclib.ProtocolError, exc:
             raise BadFormat('Order %s: %s' % (order, (exc)))
+        except xmlrpclib.Fault, exc:
+            if 'This order has been cancelled.' in str(exc):
+                raise CancelledOrder('Order has been cancelled [id: %s]' % (order['id'],))
         except Exception, exc:
             print(exc, file=stderr)
             raise
