@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 # imports
 from collections import OrderedDict
-from dbf import Date, DateTime, Time, RelativeDay
+from dbf import Date, DateTime, RelativeDay
 from openerp import SUPERUSER_ID
 from openerp.osv import fields, osv
 from openerp.exceptions import ERPError
-from openerp.tools import DEFAULT_SERVER_DATETIME_FORMAT
 from VSS.utils import float, all_equal
+from fnx import construct_datetime
 from fnx.oe import Proposed
-from pytz import timezone
 import logging
 
 # set up
@@ -20,8 +19,6 @@ DIRECTION = {
     'incoming' : 'purchase',
     'outgoing' : 'sale',
     }
-
-utc = timezone('UTC')
 
 #tables
 
@@ -150,7 +147,7 @@ class fnx_sr_shipping(osv.Model):
                 appt = Date.fromymd(values['appointment_date'][:-2] + '01')
                 appt = appt.replace(delta_month=1)
                 values['appointment_date'] = appt.ymd()
-            values['appointment'] = construct_datetime(appt, 0)
+            values['appointment'] = construct_datetime(appt, 0, context)
         return super(fnx_sr_shipping, self).create(cr, uid, values, context=context)
 
     def write(self, cr, uid, ids, values, context=None):
@@ -173,7 +170,7 @@ class fnx_sr_shipping(osv.Model):
                 appt = Date.fromymd(values['appointment_date'][:-2] + '01')
                 appt = appt.replace(delta_month=1)
                 values['appointment_date'] = appt.ymd()
-            values['appointment'] = construct_datetime(appt, values.get('appointment_time', 0))
+            values['appointment'] = construct_datetime(appt, values.get('appointment_time', 0), context)
         if ids and ('state' not in values or values['state'] == 'reopen'):
             for record in self.browse(cr, SUPERUSER_ID, ids, context=context):
                 # calculate the current state based on the data changes
@@ -209,7 +206,7 @@ class fnx_sr_shipping(osv.Model):
 
     def onchange_appointment(self, cr, uid, ids, appt_date, appt_time, context=None):
         return {'value': {
-                    'appointment': construct_datetime(appt_date, appt_time),
+                    'appointment': construct_datetime(appt_date, appt_time, context),
                     },
                     }
 
@@ -374,7 +371,7 @@ class fnx_sr_shipping_schedule_appt(osv.osv_memory):
         # save to values dict
         values['appointment_date'] = record.appointment_date
         values['appointment_time'] = record.appointment_time
-        values['appointment'] = construct_datetime(record.appointment_date, record.appointment_time)
+        values['appointment'] = construct_datetime(record.appointment_date, record.appointment_time, context)
         values['carrier_id'] = record.carrier_id.id
         # update records in active_model
         return sr.write(cr, uid, order_ids, values, context=context)
@@ -400,33 +397,4 @@ class fnx_sr_shipping_checkout(osv.osv_memory):
         order_ids = context['active_ids']
         sr = self.pool.get('fnx.sr.shipping')
         return sr.sr_checkout(cr, uid, order_ids, context=context)
-
-
-def construct_datetime(appt_date, appt_time):
-    # XXX: change this hardcoded time zone after all users verified to not be in UTC
-    # and res.users no longer has UTC as the default time zone
-    # user_tz = timezone(get_user_timezone(self, cr, uid)[uid])
-    user_tz = timezone('America/Los_Angeles')
-    utc = timezone('UTC')
-    date = time = None
-    if appt_date:
-        # will never see an invalid date due to javascript library
-        date = Date(appt_date)
-    if appt_time:
-        # may see an invalid time
-        try:
-            time = Time.fromfloat(appt_time)
-        except:
-            raise ERPError('Invalid Time', 'Time should be between 0:00 and 23:59 (not %s)' % appt_time)
-    else:
-        time = Time(0)
-    if date:
-        # we have all the pieces, make a datetime
-        dt = DateTime.combine(date, time).datetime()
-        dt = user_tz.normalize(user_tz.localize(dt)).astimezone(utc)
-        datetime = dt.strftime(DEFAULT_SERVER_DATETIME_FORMAT)
-    else:
-        datetime = False
-    return datetime
-
 
