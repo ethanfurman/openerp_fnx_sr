@@ -37,7 +37,7 @@ CONFIG = Path('/etc/openerp/fnx.ini')
 try:
     settings = OrmFile(CONFIG, section='openerp')
 except Exception:
-    print('WARNING: unable to process configfile; all parameters must be specified', verbose=0)
+    echo('WARNING: unable to process configfile; all parameters must be specified')
     HOST = ''
     USER = ''
     DB = ''
@@ -560,7 +560,7 @@ def update(file, directory=SOURCE):
                         update_order(order)
                         dest = ARCHIVE
                 except (BadFormat, MissingPartner, CancelledOrder), exc:
-                    print('%s: %s' % (file, exc.message or exc.args), file=stderr)
+                    error('%s: %s' % (file, exc.message or exc.args))
                     with open(file) as f:
                         data = '================\n%s\n----------------' % file
                         data += f.read() + '\n'
@@ -569,7 +569,7 @@ def update(file, directory=SOURCE):
                     dest = ERRORS
                     failures = True
                 except (Exception, ), exc:
-                    print('%s: %s' % (file, exc.message or exc.args), file=stderr)
+                    error('%s: %s' % (file, exc.message or exc.args))
                     # failing.append('%s: %s' % (file, exc.message or exc.args))
                     dest = None
                     failures = True
@@ -578,7 +578,7 @@ def update(file, directory=SOURCE):
                     archive(file, dest)
         if failures:
             # raise Exception("Unable to process orders:\n\t%s" % '\n\t'.join(failed))
-            print('\n'.join(bad_orders), file=stderr)
+            error('\n'.join(bad_orders))
             raise SystemExit(-1)
     finally:
         if lock:
@@ -966,15 +966,17 @@ def update_order(values):
     # partner_source_document --> PO TEST
     # partner_xmlid --> AWGRO
     # weight --> 139
+    print('------', verbose=2)
+    print('processsing order:  %s...', values.local_source_document, end=' ')
     if not values.local_source_document:
         raise BadFormat('missing local source document')
     context = PropertyDict()
     local_contacts = values.pop('local_contact', None)
-    print('local_contacts:', local_contacts)
+    print('\n  local_contacts:', local_contacts, verbose=2)
     if local_contacts is not None:
         local_contacts = [lc for lc in set(local_contacts) if lc not in ('sysadmin', 'rgiannini')]
         records = OE.res_users.search_read(fields=['id', 'partner_id'], domain=[('login','in',local_contacts)])
-        print('found:\n', '\n'.join(repr(r) for r in records))
+        print('  found:\n', '\n'.join(repr(r) for r in records), verbose=2)
         values.message_follower_ids = [lc['partner_id'][0] for lc in records]
     partner_xmlid = values.pop('partner_xmlid', None)
     if partner_xmlid is not None:
@@ -1023,7 +1025,7 @@ def update_order(values):
         order = orders[0]
     else:
         order = None
-    print('order:', order)
+    print('  order:', order, verbose=2)
     if not order:
         if not direction:
             raise BadFormat('cannot create new document %r without a direction' % values.local_source_document)
@@ -1033,24 +1035,26 @@ def update_order(values):
         values.login_id = records[0]['id']
     if not order:
         try:
-            print('creating:\n', values)
+            print('  creating:\n', values, verbose=2)
             OE.fnx_shipping.create(dict(values), context=dict(context))
+            print('  created')
         except xmlrpclib.ProtocolError, exc:
             raise BadFormat('Order %s: %s' % (order, (exc)))
         except Exception, exc:
-            print(exc, file=stderr)
+            error(exc)
             raise
     else:
         try:
-            print('updating:', values.items())
+            print('  updating:', values.items(), verbose=2)
             OE.fnx_shipping.write([order['id']], dict(values))
+            print('  updated')
         except xmlrpclib.ProtocolError, exc:
             raise BadFormat('Order %s: %s' % (order, (exc)))
         except xmlrpclib.Fault, exc:
             if 'This order has been cancelled.' in str(exc):
                 raise CancelledOrder('Order has been cancelled [id: %s]' % (order['id'],))
         except Exception, exc:
-            print(exc, file=stderr)
+            error(exc)
             raise
 
 def get_files(source=SOURCE):
