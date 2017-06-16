@@ -967,7 +967,7 @@ def update_order(values):
     # partner_xmlid --> AWGRO
     # weight --> 139
     print('------', verbose=2)
-    print('processsing order:  %s...' % (values.local_source_document,), end=' ')
+    print('processsing order:  %7s...' % (values.local_source_document,), end=' ')
     if not values.local_source_document:
         raise BadFormat('missing local source document')
     context = PropertyDict()
@@ -1039,8 +1039,10 @@ def update_order(values):
             OE.fnx_shipping.create(dict(values), context=dict(context))
             print('  created')
         except xmlrpclib.ProtocolError, exc:
+            print('  failed')
             raise BadFormat('Order %s: %s' % (order, (exc)))
         except Exception, exc:
+            print('  failed')
             error(exc)
             raise
     else:
@@ -1049,11 +1051,16 @@ def update_order(values):
             OE.fnx_shipping.write([order['id']], dict(values))
             print('  updated')
         except xmlrpclib.ProtocolError, exc:
+            print('  failed')
             raise BadFormat('Order %s: %s' % (order, (exc)))
         except xmlrpclib.Fault, exc:
             if 'This order has been cancelled.' in str(exc):
                 raise CancelledOrder('Order has been cancelled [id: %s]' % (order['id'],))
+                print('  order has been cancelled')
+            else:
+                print('  failed')
         except Exception, exc:
+            print('  failed')
             error(exc)
             raise
 
