@@ -967,7 +967,7 @@ def update_order(values):
     # partner_xmlid --> AWGRO
     # weight --> 139
     print('------', verbose=2)
-    print('processsing order:  %s...', values.local_source_document, end=' ')
+    print('processsing order:  %s...' % (values.local_source_document,), end=' ')
     if not values.local_source_document:
         raise BadFormat('missing local source document')
     context = PropertyDict()
