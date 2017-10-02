@@ -151,7 +151,9 @@ class fnx_sr_shipping(osv.Model):
         return super(fnx_sr_shipping, self).create(cr, uid, values, context=context)
 
     def write(self, cr, uid, ids, values, context=None):
-        context = context
+        context = (context or {}).copy()
+        if 'tz' not in context:
+            context['tz'] = 'UTC'
         if isinstance(ids, (int, long)):
             ids = [ids]
         follower_ids = values.pop('message_follower_ids', [])
@@ -159,6 +161,7 @@ class fnx_sr_shipping(osv.Model):
         if login_id:
             res_users = self.pool.get('res.users')
             partner = res_users.browse(cr, uid, login_id, context=context).partner_id
+            context['tz'] = partner.tz
             values['local_contact_id'] = partner.id
             follower_ids.append(partner.id)
         if follower_ids:
