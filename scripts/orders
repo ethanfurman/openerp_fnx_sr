@@ -16,7 +16,7 @@ from antipathy import Path
 from VSS.time_machine import PropertyDict
 from VSS.utils import ProgressBar
 from VSS.constants import Enum
-import logging
+from logging import INFO, getLogger, info, Formatter, handlers
 from openerplib import get_connection, get_records
 import os
 import shutil
@@ -24,13 +24,19 @@ import socket
 import time
 import xmlrpclib
 
-logging.basicConfig(
-        filename='/var/log/openerp/fnx_sr.log',
-        level=logging.DEBUG,
-        format='%(process)06d %(asctime)s %(name)-25s %(message)s',
+logger = getLogger()
+logger.setLevel(INFO)
+_handler = handlers.RotatingFileHandler(
+        '/var/log/openerp/fnx_sr.log',
+        maxBytes=1024*1024*1024,
+        backupCount=30,
         )
-
+_formatter = Formatter('%(process)06d %(asctime)s %(name)-25s %(message)s')
+_handler.setFormatter(_formatter)
+logger.addHandler(_handler)
+del _handler, _formatter
 SOURCE = Path('/var/fis/')
+
 ARCHIVE = Path('/var/openerp/archive/shipping/')
 ERRORS = Path('/var/openerp/archive/shipping/error')
 CONFIG = Path('%s/config/fnx.ini' % os.environ['VIRTUAL_ENV'])
@@ -72,14 +78,14 @@ def main(host, db, user, pw):
         if not module[req]:
             raise SystemExit('%r required; use --help for more info' % req)
     global logger
-    logger = logging.getLogger('orders')
+    logger = getLogger('orders')
 
 @Command(
         remove=('remove identical duplicates', 'flag', ),
         )
 def find_duplicates(remove=False):
     """Look for duplicate orders; print any found"""
-    logging.info('find_duplicates(remove=%r)', remove)
+    logger.info('find_duplicates(remove=%r)', remove)
     connect_oe(HOST, DB, USER, PW)
     records = OE.fnx_shipping.search_read(fields=['id', 'local_source_document'], )
     order_numbers = set()
