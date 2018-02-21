@@ -576,10 +576,13 @@ def update(file, directory=SOURCE):
                     else:
                         update_order(order)
                         dest = ARCHIVE
-                except (BadFormat, MissingPartner, CancelledOrder), exc:
+                except MissingPartner as exc:
+                    echo('%s: %s (skipping)' % (file.filename, exc.message or exc.args), border='lined')
+                    dest = None
+                except (BadFormat, CancelledOrder) as exc:
                     error('%s: %s' % (file, exc.message or exc.args))
                     with open(file) as f:
-                        data = '================\n%s\n----------------' % file
+                        data = '================\n%s\n----------------\n' % file
                         data += f.read() + '\n'
                         bad_orders.append(data)
                     # failing.append('%s: %s' % (file, exc.message or exc.args))
