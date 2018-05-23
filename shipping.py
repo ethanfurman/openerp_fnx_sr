@@ -109,7 +109,7 @@ class fnx_sr_shipping(osv.Model):
         'appointment_time': fields.float('Appointment time', help="Time when driver should arrive."),
         'appointment': fields.datetime('Appointment', track_visibility='change_only'),
         'duration': fields.function(_calc_duration, type='float', string='Duration (in hours)',
-                store={'fnx.sr.shipping': (_calc_duration, ['check_in', 'check_out'], 10)}),
+                store={'fnx.sr.shipping': (lambda s, c, u, ids, ctx={}: ids, ['check_in', 'check_out'], 30)}),
         'appt_scheduled_by_id': fields.many2one('res.users', 'Scheduled by', help="Falcon employee that scheduled appointment."),
         'appt_confirmed': fields.boolean('Appointment confirmed'),
         'appt_confirmed_on': fields.datetime('Confirmed on', help="When the appointment was confirmed with the carrier"),
