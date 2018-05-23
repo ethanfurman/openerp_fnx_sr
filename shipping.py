@@ -7,7 +7,6 @@ from openerp.osv import fields, osv
 from openerp.exceptions import ERPError
 from VSS.utils import float, all_equal
 from fnx import construct_datetime
-from fnx.oe import Proposed
 import logging
 
 # set up
@@ -71,23 +70,60 @@ class fnx_sr_shipping(osv.Model):
                 result[id] = float(check_out - check_in)
         return result
 
+    def _calc_state(self, cr, uid, ids, field_name, args, context=None):
+        res = {}
+        for record in self.browse(cr, SUPERUSER_ID, ids, context=context):
+            # calculate the current state based on the data changes
+            state = 'draft'
+            old_state = record.state
+            reopen = context.get('reopen', False)
+            if old_state == 'cancelled' and not reopen:
+                raise ERPError('Invalid Operation', 'This order has been cancelled.')
+            # appt -> scheduled
+            if record.appointment and record.pallets:
+                state = 'ready'
+            # checkin -> loading
+            if record.check_in:
+                state = 'loading'
+            # -> transit (not implemented)
+            # checkout -> complete
+            if (record.check_out or old_state == 'complete') and not reopen:
+                state = 'complete'
+            # -> cancelled (doesn't happen here)
+            res[record.id] = state
+        return res
+
     _columns = {
 
-        'state': fields.selection([
-            ('draft', 'Order Placed'),
-            ('ready', 'Ready'),
-            ('loading', 'Loading/Unloading'),
-            ('transit', 'En Route'),
-            ('complete', 'Complete'),
-            ('cancelled', 'Cancelled'),
-            ], 'Status',
+        'state': fields.function(
+            _calc_state,
+            fnct_inv=True,
+            type='selection',
+            selection=(
+                ('draft', 'Order Placed'),
+                ('ready', 'Ready'),
+                ('loading', 'Loading/Unloading'),
+                ('transit', 'En Route'),
+                ('complete', 'Complete'),
+                ('cancelled', 'Cancelled'),
+                ),
+            string='Status',
             sort_order='definition',
-            help="Draft     --> Initial entry of order.\n"
-                 "Ready     --> Order has been pulled and palletized, carrier appointment has been confirmed.\n"
-                 "Loading/Unloading --> Order is being transferred to/from the delivery truck.\n"
-                 "En Route  --> Order is travelling to destination.\n"
-                 "Complete  --> Order has been shipped.\n"
-                 "Cancelled --> Order was cancelled.",
+            help=(
+                "Draft     --> Initial entry of order.\n"
+                "Ready     --> Order has been pulled and palletized, carrier appointment has been confirmed.\n"
+                "Loading/Unloading --> Order is being transferred to/from the delivery truck.\n"
+                "En Route  --> Order is travelling to destination.\n"
+                "Complete  --> Order has been shipped.\n"
+                "Cancelled --> Order was cancelled.",
+                ),
+            store={
+                'fnx.sr.shipping': (
+                    lambda s, c, u, ids, ctx={}: ids,
+                    ['appointment_date', 'appointment_time', 'appt_confirmed', 'pallets', 'check_in', 'check_out', ],
+                    99,
+                    ),
+                },
             ),
         'name': fields.function(_document_name_get, type='char', string='Document', store=True),
         'direction': fields.selection([('incoming', 'Receiving'), ('outgoing', 'Shipping')], "Type of shipment", required=False),
@@ -98,12 +134,12 @@ class fnx_sr_shipping(osv.Model):
         'partner_source_document_type': fields.selection([('sales', 'Purchase Order:'), ('purchasing', 'Sales Order:')], 'Type of order'),
         'partner_source_document': fields.char('Their document', size=32),
         'partner_id': fields.many2one('res.partner', 'Partner', required=False, ondelete='restrict'),
-
+        #
         'weight': fields.float('Weight'),
         'cartons': fields.integer('# of cartons'),
         'pallets': fields.integer('# of pallets'),
         'comment': fields.text('Comments', help="Comment or instructions for this order only."),
-
+        #
         'carrier_id': fields.many2one('res.partner', 'Shipper', domain=[('is_carrier','=',True)]),
         'appointment_date': fields.date('Appointment date', help="Date when driver should arrive."),
         'appointment_time': fields.float('Appointment time', help="Time when driver should arrive."),
@@ -121,8 +157,6 @@ class fnx_sr_shipping(osv.Model):
 
 
     def create(self, cr, uid, values, context=None):
-        if 'state' in values:
-            values['state'] = values['state'].lower()
         res_partner = self.pool.get('res.partner')
         res_users = self.pool.get('res.users')
         if 'carrier_id' not in values or not values['carrier_id']:
@@ -175,37 +209,6 @@ class fnx_sr_shipping(osv.Model):
                 appt = appt.replace(delta_month=1)
                 values['appointment_date'] = appt.ymd()
             values['appointment'] = construct_datetime(appt, values.get('appointment_time', 0), context)
-        if ids and ('state' not in values or values['state'] == 'reopen'):
-            for record in self.browse(cr, SUPERUSER_ID, ids, context=context):
-                # calculate the current state based on the data changes
-                # 
-                vals = values.copy()
-                state = 'draft'
-                old_state = record.state
-                reopen = values.get('state') == 'reopen'
-                if old_state == 'cancelled' and not reopen:
-                    raise ERPError('Invalid Operation', 'This order has been cancelled.')
-                if reopen:
-                    del vals['state']
-                proposed = Proposed(self, cr, values, record, context=context)
-                # appt -> scheduled
-                if proposed.appointment and proposed.pallets:
-                    state = 'ready'
-                # checkin -> loading
-                if proposed.check_in:
-                    state = 'loading'
-                # -> transit (not implemented)
-                # checkout -> complete
-                if (proposed.check_out or old_state == 'complete') and not reopen:
-                    state = 'complete'
-                # -> cancelled (doesn't happen here)
-                # 
-                if not super(fnx_sr_shipping, self).write(cr, uid, [record.id], vals, context=context):
-                    return False
-                if state != old_state:
-                    if not super(fnx_sr_shipping, self).write(cr, uid, [record.id], {'state': state}, context=context):
-                        return False
-            return True
         return super(fnx_sr_shipping, self).write(cr, uid, ids, values, context=context)
 
     def onchange_appointment(self, cr, uid, ids, appt_date, appt_time, context=None):
@@ -276,9 +279,10 @@ class fnx_sr_shipping(osv.Model):
         ctx = (context or {}).copy()
         if isinstance(ids, (int, long)):
             ids = [ids]
+        ctx['reopen'] = True
         ctx['mail_create_nosubscribe'] = True
         ctx['message_force'] = 'Manager override: reset to '
-        return self.write(cr, uid, ids, {'state': 'reopen', 'check_out': False}, context=ctx)
+        return self.write(cr, uid, ids, {'check_out': False}, context=ctx)
 
     def search(self, cr, user, args=None, offset=0, limit=None, order=None, context=None, count=False):
         # 2013 08 12  (yyyy mm dd)

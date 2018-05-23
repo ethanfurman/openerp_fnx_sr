@@ -852,8 +852,7 @@ def sync_fis(show_missing, reopen, orders):
             OE.fnx_shipping.write(ids, {'state': 'complete'})  #, context={'message_track': False})
     if reopened:
         for ids in ProgressView(iterable=reopened.keys(), message='reopening $total orders', view_type='bar'):
-            OE.fnx_shipping.write(ids, {'state': 'draft'}, context={'message_track': False})
-            OE.fnx_shipping.write(ids, {'state': 'uncancel'})  #, context={'message_track': False})
+            OE.fnx_shipping.write(ids, {'check_in': False, 'check_out': False}, context={'reopen': True})
     # dates
     changed_shipping = 0
     still_open_invoices = OE.fnx_shipping.search_read(
