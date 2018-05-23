@@ -1041,7 +1041,7 @@ def update_order(values):
     elif direction == 'outgoing':
         values.job_title = values.preposition = values.partner_source_document_type = 'sales'
     orders = OE.fnx_shipping.search_read(
-            fields=['id'],
+            fields=['id','appointment_time'],
             domain=[('local_source_document','=',values.local_source_document)],
             context=context,
             )
@@ -1052,6 +1052,8 @@ def update_order(values):
                 )
     elif len(orders) == 1:
         order = orders[0]
+        if order.appointment_time:
+            values.pop('appointment_date', None)
     else:
         order = None
     print('  order:', order, verbose=2)

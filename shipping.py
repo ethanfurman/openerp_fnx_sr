@@ -167,6 +167,7 @@ class fnx_sr_shipping(osv.Model):
         if follower_ids:
             values['message_follower_ids'] = follower_ids
         if 'appointment_date' in values and 'appointment' not in values:
+            # only possible from update script
             try:
                 appt = Date.fromymd(values['appointment_date'])
             except ValueError:
