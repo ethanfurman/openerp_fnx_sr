@@ -858,7 +858,7 @@ def sync_fis(show_missing, reopen, orders):
     changed_shipping = 0
     still_open_invoices = OE.fnx_shipping.search_read(
             fields=['id', 'appointment_date', 'local_source_document', 'state'],
-            domain=oi_dmn,
+            domain=oi_dmn+[('appointment_time','=',0)],
             )
     for order in ProgressView(
             iterable=still_open_invoices,
@@ -896,7 +896,7 @@ def sync_fis(show_missing, reopen, orders):
                         )
     still_open_purchases = OE.fnx_shipping.search_read(
             fields=['id', 'appointment_date', 'local_source_document', 'state'],
-            domain=op_dmn,
+            domain=op_dmn+[('appointment_time','=',0)],
             )
     for order in ProgressView(
             iterable=still_open_purchases,
