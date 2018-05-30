@@ -66,9 +66,9 @@
                                     ~button @sr_checkout $Driver_Check-Out groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False'}"
                         ~group
                             ~group
-                                @appointment_date .oe_edit_only on_change='onchange_appointment(appointment_date, appointment_time)'
-                                @appointment_time .oe_edit_only widget='float_time' on_change='onchange_appointment(appointment_date, appointment_time)'
-                                @appointment .oe_edit_hide
+                                @appointment_date .oe_edit_only
+                                @appointment_time .oe_edit_only on_change='onchange_appt_time(appointment_time)'
+                                @appointment .oe_view_only
                                 ~separator colspan='2'
                                 @check_in writeonly="groups('fnx_sr.group_fnx_sr_manager')"
                                 @check_out writeonly="groups('fnx_sr.group_fnx_sr_manager')"
@@ -100,7 +100,7 @@
                             @carrier_id options="{'create':False, 'create_edit':False, 'limit':15}"
                         ~group
                             @appointment_date
-                            @appointment_time widget='float_time'
+                            @appointment_time on_change='onchange_appt_time(appointment_time)'
                     ~footer
                         ~button @set_appt $Schedule type='object'
 

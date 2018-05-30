@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
 # imports
 from collections import OrderedDict
-from dbf import Date, DateTime, RelativeDay
+from dbf import Date, DateTime, Time, RelativeDay
 from openerp import SUPERUSER_ID
 from openerp.osv import fields, osv
 from openerp.exceptions import ERPError
+from openerp.tools import DEFAULT_SERVER_DATE_FORMAT
+import pytz
+import re
 from VSS.utils import float, all_equal
-from fnx import construct_datetime
 import logging
 
 # set up
 
 _logger = logging.getLogger(__name__)
-
+UTC = pytz.timezone('UTC')
 
 DIRECTION = {
     'incoming' : 'purchase',
@@ -33,7 +35,7 @@ class fnx_sr_shipping(osv.Model):
 
     _track = OrderedDict()
     _track['appointment'] = {
-            'fnx_sr.mt_ship_rec_event_scheduled': lambda s, c, u, r, ctx: 'appointment' in r and r['appointment'],
+            'fnx_sr.mt_ship_rec_event_scheduled': lambda s, c, u, r, ctx: 'appointment_time' in r and r['appointment_time'],
             }
     _track['pallets'] = {
             'fnx_sr.mt_ship_rec_event_picked': lambda s, c, u, r, ctx: 'pallets' in r and r['pallets'],
@@ -59,6 +61,47 @@ class fnx_sr_shipping(osv.Model):
             result[record.id] = {'incoming':'PO ', 'outgoing':'Inv '}.get(record.direction, '') + record.local_source_document
         return result
 
+    def _calc_appt(self, cr, uid, ids, _field, _arg, context=None):
+        res = {}
+        if context and context.get('tz'):
+            tz_name = context['tz']
+        elif uid != SUPERUSER_ID:
+            tz_name = self.pool.get('res.users').read(cr, SUPERUSER_ID, uid, ['name', 'tz'])['tz']
+        else:
+            try:
+                tz_name = self.pool.get(
+                        'ir.config_parameter'
+                        ).read(
+                            cr, 1,
+                            ids=[('key','=','database.time_zone')]
+                            )[0]['value']
+            except IndexError:
+                _logger.warning('missing system parameter: database.time_zone')
+                tz_name = ''
+        if tz_name:
+            try:
+                tz = pytz.timezone(tz_name)
+            except Exception:
+                _logger.warning("unknown timezone:  %r" % tz_name)
+                tz = UTC
+        if isinstance(ids, (int, long)):
+            ids = [ids]
+        data = self.read(cr, uid, ids, fields=['appointment_date', 'appointment_time'], context=context)
+        for datum in data:
+            # date/time are assumed to be in local time
+            try:
+                date = Date.strptime(datum['appointment_date'], DEFAULT_SERVER_DATE_FORMAT)
+            except ValueError:
+                raise ERPError('Invalid Time', 'Unable to parse date from %r' % datum['appointment_date'])
+            try:
+                time = datum['appointment_time'] or '0:00'
+                time = Time.strptime(time, '%H:%M')
+            except ValueError:
+                raise ERPError('Invalid Time', 'Unable to parse time from %r' % datum['appointment_time'])
+            dt = DateTime.combine(date, time, tzinfo=tz)
+            res[datum['id']] = dt
+        return res
+
     def _calc_duration(self, cr, uid, ids, _field=None, _arg=None, context=None):
         result = {}
         for id in ids:
@@ -67,7 +110,9 @@ class fnx_sr_shipping(osv.Model):
             if record.check_in and record.check_out:
                 check_in = DateTime(record.check_in)
                 check_out = DateTime(record.check_out)
-                result[id] = float(check_out - check_in)
+                result[id] = value = float(check_out - check_in)
+                if value < 0:
+                    raise ERPError('Invalid Time', 'The check-out time is before the check-in time.')
         return result
 
     def _calc_state(self, cr, uid, ids, field_name, args, context=None):
@@ -142,8 +187,20 @@ class fnx_sr_shipping(osv.Model):
         #
         'carrier_id': fields.many2one('res.partner', 'Shipper', domain=[('is_carrier','=',True)]),
         'appointment_date': fields.date('Appointment date', help="Date when driver should arrive."),
-        'appointment_time': fields.float('Appointment time', help="Time when driver should arrive."),
-        'appointment': fields.datetime('Appointment', track_visibility='change_only'),
+        'appointment_time': fields.char('Appointment time', size=5, help='Time when driver should arrive.'),
+        'appointment': fields.function(
+            _calc_appt,
+            type='datetime',
+            string='Appointment',
+            track_visibility='change_only',
+            store={
+                'fnx.sr.shipping': (
+                    lambda s, c, u, ids, ctx={}: ids,
+                    ['appointment_date', 'appointment_time'],
+                    10,
+                    ),
+                },
+            ),
         'duration': fields.function(_calc_duration, type='float', string='Duration (in hours)',
                 store={'fnx.sr.shipping': (lambda s, c, u, ids, ctx={}: ids, ['check_in', 'check_out'], 30)}),
         'appt_scheduled_by_id': fields.many2one('res.users', 'Scheduled by', help="Falcon employee that scheduled appointment."),
@@ -174,14 +231,6 @@ class fnx_sr_shipping(osv.Model):
             follower_ids.append(real_user.partner_id.id)
         if follower_ids:
             values['message_follower_ids'] = follower_ids
-        if 'appointment_date' in values:
-            try:
-                appt = Date.fromymd(values['appointment_date'])
-            except ValueError:
-                appt = Date.fromymd(values['appointment_date'][:-2] + '01')
-                appt = appt.replace(delta_month=1)
-                values['appointment_date'] = appt.ymd()
-            values['appointment'] = construct_datetime(appt, 0, context)
         return super(fnx_sr_shipping, self).create(cr, uid, values, context=context)
 
     def write(self, cr, uid, ids, values, context=None):
@@ -200,22 +249,15 @@ class fnx_sr_shipping(osv.Model):
             follower_ids.append(partner.id)
         if follower_ids:
             values['message_follower_ids'] = follower_ids
-        if 'appointment_date' in values and 'appointment' not in values:
-            # only possible from update script
-            try:
-                appt = Date.fromymd(values['appointment_date'])
-            except ValueError:
-                appt = Date.fromymd(values['appointment_date'][:-2] + '01')
-                appt = appt.replace(delta_month=1)
-                values['appointment_date'] = appt.ymd()
-            values['appointment'] = construct_datetime(appt, values.get('appointment_time', 0), context)
         return super(fnx_sr_shipping, self).write(cr, uid, ids, values, context=context)
 
-    def onchange_appointment(self, cr, uid, ids, appt_date, appt_time, context=None):
-        return {'value': {
-                    'appointment': construct_datetime(appt_date, appt_time, context),
-                    },
-                    }
+    def onchange_appt_time(self, cr, uid, ids, time, context=None):
+        if isinstance(ids, (int, long)):
+            ids = [ids]
+        time = normalize_time(time)
+        res = {}
+        res['value'] = dict([('appointment_time', time) for id in ids])
+        return res
 
     def sr_checkin(self, cr, uid, ids, context=None):
         ctx = (context or {}).copy()
@@ -361,6 +403,14 @@ class fnx_sr_shipping_schedule_appt(osv.osv_memory):
         'carrier_id': get_carrier,
         }
 
+    def onchange_appt_time(self, cr, uid, ids, time, context=None):
+        if isinstance(ids, (int, long)):
+            ids = [ids]
+        time = normalize_time(time)
+        res = {}
+        res['value'] = dict([(id, time) for id in ids])
+        return res
+
     def set_appt(self, cr, uid, ids, context=None):
         # context contains 'active_id', 'active_ids', and 'active_model'
         if context is None:
@@ -379,7 +429,6 @@ class fnx_sr_shipping_schedule_appt(osv.osv_memory):
         # save to values dict
         values['appointment_date'] = record.appointment_date
         values['appointment_time'] = record.appointment_time
-        values['appointment'] = construct_datetime(record.appointment_date, record.appointment_time, context)
         values['carrier_id'] = record.carrier_id.id
         # update records in active_model
         return sr.write(cr, uid, order_ids, values, context=context)
@@ -406,3 +455,25 @@ class fnx_sr_shipping_checkout(osv.osv_memory):
         sr = self.pool.get('fnx.sr.shipping')
         return sr.sr_checkout(cr, uid, order_ids, context=context)
 
+
+def normalize_time(time):
+    'converts time to 24 hh:mm format'
+    time = time + ' '
+    m = re.search(r'^\s*(\d+)[:. ](\d\d)?\s*(.*)\s*$', time.lower())
+    if not m:
+        raise ERPError('Invalid Time', 'Unable to parse %r [no match]' % time)
+    hour, minute, meridian = m.groups()
+    hour = int(hour)
+    minute = int(minute or 0)
+    meridian = meridian.replace('.', '')
+    if meridian not in ('', 'a', 'am', 'p', 'pm'):
+        raise ERPError('Invalid Time', 'Unable to parse %r [bad meridian]' % time)
+    if meridian.startswith('a') and hour == 12:
+        hour -= 12
+    elif meridian.startswith(('a','p')) and hour > 12:
+        raise ERPError('Invalid Time', 'Unable to parse %r [bad meridian]' % time)
+    elif meridian.startswith('p') and hour < 12:
+        hour += 12
+    if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+        raise ERPError('Invalid Time', '%r is not a valid time [invalid hour or minute]' % time)
+    return '%d:%02d' % (hour, minute)

@@ -7,7 +7,6 @@ from collections import defaultdict
 from dbf import Date, DateTime, Time
 from enum import IntEnum
 from pandaemonium import PidLockFile, AlreadyLocked
-from pytz import timezone
 from scandir import scandir
 from scription import *
 from VSS.BBxXlate.fisData import fisData
@@ -18,6 +17,7 @@ from VSS.utils import ProgressBar
 from VSS.constants import Enum
 from logging import INFO, getLogger, Formatter, handlers
 from openerplib import get_connection, get_records
+from openerplib.dates import LOCAL_TIME
 import os
 import shutil
 import socket
@@ -647,32 +647,27 @@ def archive(src_file, dest=ARCHIVE):
     shutil.move(src_file, dst_file)
 
 def construct_datetime(appt_date, appt_time):
-    # XXX: change this hardcoded time zone after all users verified to not be in UTC
-    # and res.users no longer has UTC as the default time zone
-    # user_tz = timezone(get_user_timezone(self, cr, uid)[uid])
-    user_tz = timezone('America/Los_Angeles')
-    utc = timezone('UTC')
     date = time = None
     if appt_date:
-        # will never see an invalid date due to javascript library
-        date = Date(appt_date)
+        try:
+            date = Date(appt_date)
+        except:
+            raise ValueError('Invalid Date:  %r' % appt_date)
     if appt_time:
         # may see an invalid time
         try:
-            time = Time.fromfloat(appt_time)
+            time = Time.strptime(appt_time, '%H:%M')
         except:
-            raise ValueError('Invalid Time', 'Time should be between 0:00 and 23:59 (not %s)' % appt_time)
+            raise ValueError('Invalid Time:  Time should be between 0:00 and 23:59 (not %s)' % appt_time)
     if date and time:
         # we have all the pieces, make a datetime
-        dt = DateTime.combine(date, time).datetime()
+        dt = DateTime.combine(date, time, tzinfo=LOCAL_TIME)
     elif date:
         # we have a date, set time to midnight
-        dt = DateTime.combine(date, Time(0)).datetime()
+        dt = DateTime.combine(date, Time(0), tzinfo=LOCAL_TIME)
     else:
         raise ValueError('Invalid Date/Time', 'Either both Date and Time should be specified, or neither')
-    dt = user_tz.normalize(user_tz.localize(dt)).astimezone(utc)
-    datetime = dt.strftime(DEFAULT_SERVER_DATETIME_FORMAT)
-    return datetime
+    return dt
 
 def get_order(order):
     g = {}
@@ -1173,11 +1168,6 @@ class F219(str, Enum):
     freight_rate_amt    = 'Tt(4)'         # Freight Rate/Amt
     no_of_pallets       = 'Tt(5)'         # Number of Pallets
 
-DEFAULT_SERVER_DATE_FORMAT = "%Y-%m-%d"
-DEFAULT_SERVER_TIME_FORMAT = "%H:%M:%S"
-DEFAULT_SERVER_DATETIME_FORMAT = "%s %s" % (
-    DEFAULT_SERVER_DATE_FORMAT,
-    DEFAULT_SERVER_TIME_FORMAT)
 
 
 Main()
