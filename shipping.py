@@ -256,7 +256,7 @@ class fnx_sr_shipping(osv.Model):
             ids = [ids]
         time = normalize_time(time)
         res = {}
-        res['value'] = dict([('appointment_time', time) for id in ids])
+        res['value'] = {'appointment_time': time}
         return res
 
     def sr_checkin(self, cr, uid, ids, context=None):
@@ -395,7 +395,7 @@ class fnx_sr_shipping_schedule_appt(osv.osv_memory):
 
     _columns = {
         'appointment_date' : fields.date('Date'),
-        'appointment_time' : fields.float('Time'),
+        'appointment_time' : fields.char('Time', size=5),
         'carrier_id': fields.many2one('res.partner', 'Shipper', domain=[('is_carrier','=',True)]),
         }
 
@@ -408,7 +408,7 @@ class fnx_sr_shipping_schedule_appt(osv.osv_memory):
             ids = [ids]
         time = normalize_time(time)
         res = {}
-        res['value'] = dict([(id, time) for id in ids])
+        res['value'] = {'appointment_time': time}
         return res
 
     def set_appt(self, cr, uid, ids, context=None):
@@ -458,6 +458,8 @@ class fnx_sr_shipping_checkout(osv.osv_memory):
 
 def normalize_time(time):
     'converts time to 24 hh:mm format'
+    if not time or not time.strip():
+        return '0:00'
     time = time + ' '
     m = re.search(r'^\s*(\d+)[:. ](\d\d)?\s*(.*)\s*$', time.lower())
     if not m:
