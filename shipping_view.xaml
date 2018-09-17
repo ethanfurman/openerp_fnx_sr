@@ -80,6 +80,9 @@
                                 ~separator colspan='2'
                                 @appt_scheduled_by_id writeonly="groups('fnx_sr.group_fnx_sr_manager')"
                                 @appt_confirmed_on writeonly="groups('fnx_sr.group_fnx_sr_manager')"
+                            ~div colspan='4'
+                                ~label for='containers'
+                                @containers nolabel='1'
                         ~notebook
                             ~page $Warehouse_Comments
                                 @partner_id.warehouse_comment attrs="{'readonly':True}" nolabel='1'
