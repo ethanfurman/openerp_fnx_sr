@@ -81,11 +81,11 @@
                                 @appt_scheduled_by_id writeonly="groups('fnx_sr.group_fnx_sr_manager')"
                                 @appt_confirmed_on writeonly="groups('fnx_sr.group_fnx_sr_manager')"
                                 @container
-                        ~notebook
-                            ~page $Warehouse_Comments
+                        ~group
+                            ~group $Order_Comments
+                                @comment nolabel='1'
+                            ~group $Warehouse_Comments attrs="{'invisible': [('partner_id.warehouse_comment','=',False)]}"
                                 @partner_id.warehouse_comment attrs="{'readonly':True}" nolabel='1'
-                            ~page $Order_Comments
-                                @comment
                     ~div .oe_chatter
                         @message_follower_ids widget='mail_followers'
                         @message_ids nolabel='1' widget='mail_thread'
