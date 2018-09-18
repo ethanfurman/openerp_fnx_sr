@@ -208,7 +208,7 @@ class fnx_sr_shipping(osv.Model):
         'appt_confirmed_on': fields.datetime('Confirmed on', help="When the appointment was confirmed with the carrier"),
         'check_in': fields.datetime('Driver checked in at',),
         'check_out': fields.datetime('Driver checked out at'),
-        'containers': fields.char('Container IDs', size=128),
+        'container': fields.char('Container ID', size=20),
         }
 
     _sql_constraints = [ ('lsd_unique', 'unique(local_source_document)', 'Already have that source document in the system') ]
