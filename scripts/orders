@@ -24,22 +24,23 @@ import socket
 import time
 import xmlrpclib
 
+virtualenv = os.environ['VIRTUAL_ENV']
 logger = getLogger()
 logger.setLevel(INFO)
 _handler = handlers.RotatingFileHandler(
-        '/var/log/openerp/fnx_sr.log',
-        maxBytes=1024*1024*1024,
+        '%s/var/log/openerp/fnx_sr.log' % virtualenv,
+        maxBytes=1024*1024,
         backupCount=30,
         )
 _formatter = Formatter('%(process)06d %(asctime)s %(name)-25s %(message)s')
 _handler.setFormatter(_formatter)
 logger.addHandler(_handler)
 del _handler, _formatter
-SOURCE = Path('/var/fis/')
+SOURCE = Path('%s/var/fis/' % virtualenv)
 
-ARCHIVE = Path('/var/openerp/archive/shipping/')
-ERRORS = Path('/var/openerp/archive/shipping/error')
-CONFIG = Path('%s/config/fnx.ini' % os.environ['VIRTUAL_ENV'])
+ARCHIVE = Path('%s/var/openerp/archive/shipping/' % virtualenv)
+ERRORS = Path('%s/var/openerp/archive/shipping/error' % virtualenv)
+CONFIG = Path('%s/config/fnx.ini' % virtualenv)
 
 try:
     settings = OrmFile(CONFIG, section='openerp')
