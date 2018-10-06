@@ -26,6 +26,13 @@
             @sequence eval='41'
             @description: Order is loading/unloading.
 
+        ~record model='mail.message.subtype' #mt_ship_rec_partial_receipt
+            @name: Order Partial Receipt
+            @res_model: fnx.sr.shipping
+            @default eval='False'
+            @sequence eval='41'
+            @description: Order is incomplete.
+
         ~record model='mail.message.subtype' #mt_ship_rec_en_route
             @name: Order Transit
             @res_model: fnx.sr.shipping

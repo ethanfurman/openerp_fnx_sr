@@ -2,13 +2,14 @@
 # imports
 from collections import OrderedDict
 from dbf import Date, DateTime, Time, RelativeDay
+from openerplib.dates import str_to_datetime, local_datetime
 from openerp import SUPERUSER_ID
 from openerp.osv import fields, osv
 from openerp.exceptions import ERPError
-from openerp.tools import DEFAULT_SERVER_DATE_FORMAT
+from openerp.tools import DEFAULT_SERVER_DATE_FORMAT, DEFAULT_SERVER_DATETIME_FORMAT
 import pytz
 import re
-from VSS.utils import float, all_equal
+from VSS.utils import float, all_equal, hrtd
 import logging
 
 # set up
@@ -44,6 +45,7 @@ class fnx_sr_shipping(osv.Model):
     state['fnx_sr.mt_ship_rec_draft'] = lambda s, c, u, r, ctx: r['state'] == 'draft'
     state['fnx_sr.mt_ship_rec_ready'] = lambda s, c, u, r, ctx: r['state'] == 'ready'
     state['fnx_sr.mt_ship_rec_loading_unloading'] = lambda s, c, u, r, ctx: r['state'] == 'loading'
+    state['fnx_sr.mt_ship_rec_partial_receipt'] = lambda s, c, u, r, ctx: r['state'] == 'partial'
     state['fnx_sr.mt_ship_rec_en_route'] = lambda s, c, u, r, ctx: r['state'] == 'transit'
     state['fnx_sr.mt_ship_rec_complete'] = lambda s, c, u, r, ctx: r['state'] == 'complete'
     state['fnx_sr.mt_ship_rec_cancelled'] = lambda s, c, u, r, ctx: r['state'] == 'cancelled'
@@ -131,7 +133,9 @@ class fnx_sr_shipping(osv.Model):
             if record.check_in:
                 state = 'loading'
             # -> transit (not implemented)
-            # checkout -> complete
+            # checkout -> (partial | complete)
+            elif record.partial_receipt:
+                state = 'partial'
             if (record.check_out or old_state == 'complete') and not reopen:
                 state = 'complete'
             # -> cancelled (doesn't happen here)
@@ -149,6 +153,7 @@ class fnx_sr_shipping(osv.Model):
                 ('ready', 'Ready'),
                 ('loading', 'Loading/Unloading'),
                 ('transit', 'En Route'),
+                ('partial', 'Partially Received'),
                 ('complete', 'Complete'),
                 ('cancelled', 'Cancelled'),
                 ),
@@ -209,6 +214,8 @@ class fnx_sr_shipping(osv.Model):
         'check_in': fields.datetime('Driver checked in at',),
         'check_out': fields.datetime('Driver checked out at'),
         'container': fields.char('Container ID', size=20),
+        'partial_receipt': fields.boolean('Partially received',),
+        'shipments': fields.text('Shipments'),
         }
 
     _sql_constraints = [ ('lsd_unique', 'unique(local_source_document)', 'Already have that source document in the system') ]
@@ -293,8 +300,9 @@ class fnx_sr_shipping(osv.Model):
                 }
         return self.write(cr, uid, ids, values, context=ctx)
 
-    def sr_checkout(self, cr, uid, ids, context=None):
+    def sr_checkout_partial(self, cr, uid, ids, context=None):
         ctx = (context or {}).copy()
+        print(ctx)
         if isinstance(ids, (int, long)):
             ids = [ids]
         if len(ids) > 1:
@@ -303,12 +311,61 @@ class fnx_sr_shipping(osv.Model):
             carrier_ids = [r.carrier_id.id for r in records]
             if not all_equal(carrier_ids):
                 raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
-        values = {'check_out':  DateTime.now()}
+        check_in = str_to_datetime(ctx['fnxsr_checkin'])
+        check_out = local_datetime()
+        shipments = ctx.get('fnxsr_shipments')
+        if shipments:
+            shipments = [shipments]
+        else:
+            shipments = []
+        shipments.append(
+                '%s - %s:  %s'
+                % (
+                    check_in,
+                    check_out,
+                    hrtd(check_out-check_in),
+                ))
+        values = {
+                'check_in': False,
+                'check_out': False,
+                'partial_receipt': True,
+                'shipments': '\n'.join(shipments),
+                }
         ctx['mail_create_nosubscribe'] = True
         if ctx.get('override', True):
             ctx['message_force'] = 'Manager override:'
         return self.write(cr, uid, ids, values, context=ctx)
-    button_complete = sr_checkout
+    button_partial = sr_checkout_partial
+
+    def sr_checkout_full(self, cr, uid, ids, context=None):
+        ctx = (context or {}).copy()
+        print(ctx)
+        if isinstance(ids, (int, long)):
+            ids = [ids]
+        if len(ids) > 1:
+            # check all have the same carrier
+            records = self.browse(cr, uid, ids, context=ctx)
+            carrier_ids = [r.carrier_id.id for r in records]
+            if not all_equal(carrier_ids):
+                raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
+        check_in = DateTime.strptime(ctx['fnxsr_checkin'], DEFAULT_SERVER_DATETIME_FORMAT)
+        check_out = DateTime.now()
+        shipments = ctx.get('fnxsr_shipments')
+        if shipments:
+            shipments = [shipments]
+        else:
+            shipments = []
+        shipments.append('%s - %s:  %s' % (check_in, check_out, hrtd(check_out-check_in)))
+        values = {
+                'check_out':  check_out,
+                'partial_receipt': False,
+                'shipments': '\n'.join(shipments),
+                }
+        ctx['mail_create_nosubscribe'] = True
+        if ctx.get('override', True):
+            ctx['message_force'] = 'Manager override:'
+        return self.write(cr, uid, ids, values, context=ctx)
+    button_complete = sr_checkout_full
 
     def button_cancel(self, cr, uid, ids, context=None):
         ctx = (context or {}).copy()

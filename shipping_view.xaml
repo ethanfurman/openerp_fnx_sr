@@ -61,9 +61,10 @@
                                             @job_title .oe_inline attrs="{'readonly':True}"
                                             @local_contact_id .oe_inline writeonly="groups('fnx_sr.group_fnx_sr_manager')"
                                 ~div class='oe_right oe_button_box'
-                                    ~button @sr_checkin $Driver_Check-In groups='fnx_sr.group_fnx_sr_user' type='object' states='draft,ready' context="{'override': False'}"
-                                    ~button @sr_uncheckin $Undo_Check-In groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False'}"
-                                    ~button @sr_checkout $Driver_Check-Out groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False'}"
+                                    ~button @sr_checkin $Driver_Check-In groups='fnx_sr.group_fnx_sr_user' type='object' states='draft,ready,partial' context="{'override': False}"
+                                    ~button @sr_uncheckin $Undo_Check-In groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False}"
+                                    ~button @sr_checkout_partial $Partial_Order_Received groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False, 'fnxsr_shipments': shipments, 'fnxsr_checkin': check_in}"
+                                    ~button @sr_checkout_full $Full_Order_Received groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False, 'fnxsr_shipments': shipments, 'fnxsr_checkin': check_in}"
                         ~group
                             ~group
                                 @appointment_date .oe_edit_only
@@ -86,6 +87,10 @@
                                 @comment nolabel='1'
                             ~group $Warehouse_Comments attrs="{'invisible': [('partner_id.warehouse_comment','=',False)]}"
                                 @partner_id.warehouse_comment attrs="{'readonly':True}" nolabel='1'
+                        ~div attrs="{'invisible': [('shipments','=',False)]}"
+                            ~hr
+                            ~label for='shipments'
+                            @shipments attrs="{'readonly': True}"
                     ~div .oe_chatter
                         @message_follower_ids widget='mail_followers'
                         @message_ids nolabel='1' widget='mail_thread'
@@ -277,3 +282,52 @@
         ~menuitem name='Closed Orders' #menu_item_fnx_sr_schedule_closed action='action_fnx_sr_form_closed_orders' parent='menu_fnx_sr_shipping' sequence='30'
 
         ~menuitem name='All Orders' #menu_item_fnx_sr_schedule_all action='action_fnx_sr_form_all_orders' parent='menu_fnx_sr_shipping' sequence='40'
+
+
+    ~data noupdate='0'
+
+        // Scheduled jobs
+
+        ~record model='ir.cron' #fnx_sr_order_update
+            @name: Update orders from FIS
+            @interval_number: 15
+            @interval_type: minutes
+            @numbercall: -1
+            @doall eval='False'
+            @type: external
+            @args: /opt/bin/orders update -d /mnt/11-111/var/fis/to16/
+            @timeout eval='10'
+            @nextcall: 2018-09-04 08:00:00
+
+        ~record model='ir.cron' #fnx_sr_order_purge
+            @name: Remove completed and out-of-date orders
+            @interval_number: 1
+            @interval_type: days
+            @numbercall: -1
+            @doall eval='False'
+            @type: external
+            @args: /opt/bin/orders purge -v
+            @timeout eval='240'
+            @nextcall: 2018-09-04 04:35:00
+
+        ~record model='ir.cron' #fnx_sr_order_sync_erp
+            @name: Ensure orders are internally consistent
+            @interval_number: 1
+            @interval_type: days
+            @numbercall: -1
+            @doall eval='False'
+            @type: external
+            @args: /opt/bin/orders sync erp
+            @timeout eval='180'
+            @nextcall: 2018-09-04 04:55:00
+
+        ~record model='ir.cron' #fnx_sr_order_sync_fis
+            @name: Ensure orders match FIS
+            @interval_number: 1
+            @interval_type: days
+            @numbercall: -1
+            @doall eval='False'
+            @type: external
+            @args: /opt/bin/orders sync fis
+            @timeout eval='180'
+            @nextcall: 2018-09-04 05:15:00
