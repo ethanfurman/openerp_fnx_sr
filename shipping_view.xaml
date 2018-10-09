@@ -63,8 +63,8 @@
                                 ~div class='oe_right oe_button_box'
                                     ~button @sr_checkin $Driver_Check-In groups='fnx_sr.group_fnx_sr_user' type='object' states='draft,ready,partial' context="{'override': False}"
                                     ~button @sr_uncheckin $Undo_Check-In groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False}"
-                                    ~button @sr_checkout_partial $Partial_Order_Received groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False, 'fnxsr_shipments': shipments, 'fnxsr_checkin': check_in}"
-                                    ~button @sr_checkout_full $Full_Order_Received groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False, 'fnxsr_shipments': shipments, 'fnxsr_checkin': check_in}"
+                                    ~button @sr_checkout_partial $Partial_Order_Complete groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False, 'fnxsr_shipments': shipments, 'fnxsr_checkin': check_in}"
+                                    ~button @sr_checkout_full $Full_Order_Complete groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False, 'fnxsr_shipments': shipments, 'fnxsr_checkin': check_in}"
                         ~group
                             ~group
                                 @appointment_date .oe_edit_only

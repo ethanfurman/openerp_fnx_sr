@@ -134,7 +134,7 @@ class fnx_sr_shipping(osv.Model):
                 state = 'loading'
             # -> transit (not implemented)
             # checkout -> (partial | complete)
-            elif record.partial_receipt:
+            elif record.partial_complete:
                 state = 'partial'
             if (record.check_out or old_state == 'complete') and not reopen:
                 state = 'complete'
@@ -153,7 +153,7 @@ class fnx_sr_shipping(osv.Model):
                 ('ready', 'Ready'),
                 ('loading', 'Loading/Unloading'),
                 ('transit', 'En Route'),
-                ('partial', 'Partially Received'),
+                ('partial', 'Partially Complete'),
                 ('complete', 'Complete'),
                 ('cancelled', 'Cancelled'),
                 ),
@@ -161,10 +161,11 @@ class fnx_sr_shipping(osv.Model):
             sort_order='definition',
             help=(
                 "Draft     --> Initial entry of order.\n"
-                "Ready     --> Order has been pulled and palletized, carrier appointment has been confirmed.\n"
-                "Loading/Unloading --> Order is being transferred to/from the delivery truck.\n"
+                "Ready     --> Order has been pulled and palletized and/or carrier appointment has been confirmed.\n"
+                "Loading/Unloading  --> Order is being transferred to/from the delivery truck.\n"
                 "En Route  --> Order is travelling to destination.\n"
-                "Complete  --> Order has been shipped.\n"
+                "Partially Complete --> Some, not all, of order is done.\n"
+                "Complete  --> Order is done (shipped or received).\n"
                 "Cancelled --> Order was cancelled.",
                 ),
             store={
@@ -214,7 +215,7 @@ class fnx_sr_shipping(osv.Model):
         'check_in': fields.datetime('Driver checked in at',),
         'check_out': fields.datetime('Driver checked out at'),
         'container': fields.char('Container ID', size=20),
-        'partial_receipt': fields.boolean('Partially received',),
+        'partial_complete': fields.boolean('Partially complete', oldname='partial_receipt'),
         'shipments': fields.text('Shipments'),
         }
 
@@ -328,7 +329,7 @@ class fnx_sr_shipping(osv.Model):
         values = {
                 'check_in': False,
                 'check_out': False,
-                'partial_receipt': True,
+                'partial_complete': True,
                 'shipments': '\n'.join(shipments),
                 }
         ctx['mail_create_nosubscribe'] = True
@@ -358,7 +359,7 @@ class fnx_sr_shipping(osv.Model):
         shipments.append('%s - %s:  %s' % (check_in, check_out, hrtd(check_out-check_in)))
         values = {
                 'check_out':  check_out,
-                'partial_receipt': False,
+                'partial_complete': False,
                 'shipments': '\n'.join(shipments),
                 }
         ctx['mail_create_nosubscribe'] = True
