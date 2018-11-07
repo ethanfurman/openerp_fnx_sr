@@ -28,7 +28,7 @@ virtualenv = os.environ['VIRTUAL_ENV']
 logger = getLogger()
 logger.setLevel(INFO)
 _handler = handlers.RotatingFileHandler(
-        '%s/var/log/openerp/fnx_sr.log' % virtualenv,
+        '%s/var/log/fnx_sr.log' % virtualenv,
         maxBytes=1024*1024,
         backupCount=30,
         )
@@ -967,8 +967,8 @@ def sync_fis(show_missing, reopen, orders):
 def update_order(values):
     # carrier is the shipping agent
     # partner is the vendor/customer
-    # partner_source_document is the vendor/customer invoice number / purchase order
-    # local_source_document is the purchase order / invoice number
+    # partner_source_document is the vendor invoice number / customer purchase order
+    # local_source_document is our purchase order / invoice number
     # local_contact is the falcon user
     #
     # appointment_date -> 20140107
