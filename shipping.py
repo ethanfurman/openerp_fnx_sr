@@ -258,6 +258,9 @@ class fnx_sr_shipping(osv.Model):
             follower_ids.append(partner.id)
         if follower_ids:
             values['message_follower_ids'] = follower_ids
+        # don't (easily) reset pallets
+        if values.get('pallets') == 0 and not context.get('fnxsr_pallet_reset'):
+            values.pop('pallets')
         return super(fnx_sr_shipping, self).write(cr, uid, ids, values, context=context)
 
     def onchange_appt_time(self, cr, uid, ids, time, context=None):
@@ -384,6 +387,12 @@ class fnx_sr_shipping(osv.Model):
         ctx['mail_create_nosubscribe'] = True
         ctx['message_force'] = 'Manager override: reset to '
         return self.write(cr, uid, ids, {'check_out': False}, context=ctx)
+
+    def button_reset(self, cr, uid, ids, context=None):
+        ctx = (context or {}).copy()
+        ctx['fnxsr_pallet_reset'] = True
+        values = {'pallets': 0}
+        return self.write(cr, uid, ids, values, context=ctx)
 
     def search(self, cr, user, args=None, offset=0, limit=None, order=None, context=None, count=False):
         # 2013 08 12  (yyyy mm dd)

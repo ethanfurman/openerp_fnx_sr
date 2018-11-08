@@ -39,9 +39,9 @@
             @arch type='xml'
                 ~form string='Shipping & Receiving' create='false' version='7.0'
                     ~header
-                        ~button @button_complete $Close_Order .oe_edit_hide type='object' states='draft,ready,loading,transit' groups='fnx_sr.group_fnx_sr_manager'
-                        ~button @button_cancel $Cancel_Order .oe_edit_hide type='object' states='draft,ready,loading,transit' groups='fnx_sr.group_fnx_sr_manager'
-                        ~button @button_reopen $Reopen_Order .oe_edit_hide type='object' states='complete,cancelled' groups='fnx_sr.group_fnx_sr_manager'
+                        ~button @button_complete $Close_Order .oe_view_only type='object' states='draft,ready,loading,transit' groups='fnx_sr.group_fnx_sr_manager'
+                        ~button @button_cancel $Cancel_Order .oe_view_only type='object' states='draft,ready,loading,transit' groups='fnx_sr.group_fnx_sr_manager'
+                        ~button @button_reopen $Reopen_Order .oe_view_only type='object' states='complete,cancelled' groups='fnx_sr.group_fnx_sr_manager'
                         @state statusbar_visible='draft,ready,complete' widget='statusbar'
                     ~sheet
                         ~group
@@ -78,6 +78,7 @@
                                 @weight attrs="{'readonly':True}"
                                 @cartons attrs="{'readonly':True}"
                                 @pallets attrs="{'readonly':True}"
+                                ~button @button_reset $Clear_Pallet_Count .oe_view_only type='object' states='ready' groups='fnx_sr.group_fnx_sr_manager' .oe_right colspan='2'
                                 ~separator colspan='2'
                                 @appt_scheduled_by_id writeonly="groups('fnx_sr.group_fnx_sr_manager')"
                                 @appt_confirmed_on writeonly="groups('fnx_sr.group_fnx_sr_manager')"
