@@ -652,14 +652,20 @@ def construct_datetime(appt_date, appt_time):
     if appt_date:
         try:
             date = Date(appt_date)
-        except:
+        except ValueError:
+            # error('Invalid Date: %r' % appt_date)
             raise ValueError('Invalid Date:  %r' % appt_date)
     if appt_time:
         # may see an invalid time
         try:
             time = Time.strptime(appt_time, '%H:%M')
-        except:
-            raise ValueError('Invalid Time:  Time should be between 0:00 and 23:59 (not %s)' % appt_time)
+        except ValueError:
+            # try a float conversion
+            try:
+                time = Time.fromfloat(float(appt_time))
+            except ValueError:
+                # error('Invalid Time:  %r' % appt_time)
+                raise ValueError('Invalid Time:  %r)' % appt_time)
     if date and time:
         # we have all the pieces, make a datetime
         dt = DateTime.combine(date, time, tzinfo=LOCAL_TIME)
@@ -708,8 +714,16 @@ def sync_openerp(orders):
         date, time = date_time
         try:
             appt = construct_datetime(date, time)
-        except ValueError:
-            error('invalid date/time: %s %s.  skipping %d records' % (date, time, len(ids)))
+        except (TypeError, ValueError):
+            error(
+                    'invalid date/time:< %r %r >.  skipping %d records: %s'
+                    % (
+                        date,
+                        time,
+                        len(ids),
+                        ', '.join([str(i) for i in ids]),
+                    ))
+            raise
             continue
         OE.fnx_shipping.write(ids, {'appointment': appt}, context={'message_track': False})
 
@@ -1171,4 +1185,5 @@ class F219(str, Enum):
 
 
 
-Main()
+with user_ids(0, 0):
+    Main()
