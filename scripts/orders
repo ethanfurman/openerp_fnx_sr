@@ -81,6 +81,49 @@ def main(host, db, user, pw):
     global logger
     logger = getLogger('orders')
 
+
+@Command(
+        order=('specific order to check', OPTION),
+        )
+def order_check(order='*'):
+    orders = defaultdict(list)
+    if order != '*':
+        order += '_*'
+    for file_name in ARCHIVE.glob(order):
+        if '_' not in file_name:
+            continue
+        base, seq = file_name.filename.split('_')
+        orders[int(base)].append(file_name)
+    for order_no in reversed(sorted(orders.keys())):
+        files = orders[order_no]
+        print('checking', order_no)
+        print('  with:\n     %s' % '\n     '.join(sorted(files)), verbose=2)
+        complete_order = load_order(*files)
+        if order != '*':
+            print_table(*complete_order)
+            return
+        pallets_cleared = False
+        for values in reversed(complete_order):
+            if values.get('state') == 'complete':
+                break
+            elif values.get('pallets') == 0:
+                pallets_cleared = True
+            elif values.get('pallets'):
+                if not pallets_cleared:
+                    break
+                # at this point we know that pallets were reset back to zero,
+                # so we can check this order in OpenERP to see if the reset
+                # failed as it should
+                #
+                # print out the progress of the order so we can see how it
+                # evolved
+                print_table(*complete_order)
+                if get_response('Continue?'):
+                    continue
+                else:
+                    return
+
+
 @Command(
         remove=('remove identical duplicates', 'flag', ),
         )
@@ -1115,6 +1158,67 @@ def connect_oe(hostname, database, user, password):
     OE.res_users = conn.get_model('res.users')
     OE.fnx_shipping = conn.get_model('fnx.sr.shipping')
 
+
+order_template = {
+    'appointment_date': False,
+    'carrier_xmlid': False,
+    'cartons': False,
+    'direction': False,
+    'local_contact': False,
+    'local_source_document': False,
+    'pallets': False,
+    'partner_source_document': False,
+    'partner_xmlid': False,
+    'weight': False,
+    }
+
+def get_order_step(filename):
+    g = {}
+    step = filename.rsplit('_')[-1]
+    execfile(filename, g)
+    if 'order' not in g:
+        raise Exception('empty file?')
+    order = g['order']
+    order['step'] = int(step)
+    return order
+
+def load_order(*filenames):
+    order = []
+    for fn in sorted(filenames):
+        order.append(get_order_step(fn))
+    return order
+
+def print_table(*dicts):
+    col_headers = set()
+    col_widths = defaultdict(int)
+    for d in dicts:
+        for k in d.keys():
+            if k == 'local_contact':
+                continue
+            col_headers.add(k)
+            width = len(k)
+            if k == 'state':
+                width = 10
+            col_widths[k] = max(col_widths[k], width)
+    col_widths['state'] = 10
+    col_headers = sorted(col_headers)
+    col_headers.remove('step')
+    col_headers.insert(0, 'step')
+    header = []
+    for h in col_headers:
+        header.append('%-*s' % (col_widths[h], h))
+    echo('   '.join(header))
+    last_dict = {}
+    for step, order in enumerate(dicts, start=1):
+        print('examining dict %r: %r' % (step, order), verbose=3)
+        line = []
+        for col in col_headers:
+            val = order.get(col, '.')
+            if val is not False and val == last_dict.get(col):
+                val = '='
+            line.append('%-*s' % (col_widths[col], val))
+        echo(' ' + '   '.join(line))
+        last_dict = order
 
 class F36(str, Enum):
     """
