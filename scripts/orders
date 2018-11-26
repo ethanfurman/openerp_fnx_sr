@@ -14,10 +14,10 @@ from VSS.utils import grouped, fix_date, date
 from antipathy import Path
 from VSS.time_machine import PropertyDict
 from VSS.utils import ProgressBar
-from VSS.constants import Enum
 from logging import INFO, getLogger, Formatter, handlers
 from openerplib import get_connection, get_records
 from openerplib.dates import LOCAL_TIME
+from updates.fis_schema import F36, F219
 import os
 import shutil
 import socket
@@ -250,14 +250,14 @@ def info():
     print('getting orders', verbose=0)
     all_orders = get_records(
             OE.fnx_shipping,
-            fields=['id', 'state', 'name', 'direction', 'appointment_date', 'partner_id', 'local_source_document'],
+            fields=['id', 'state', 'name', 'direction', 'ship_date', 'partner_id', 'local_source_document'],
             )
     month = defaultdict(lambda: dict(total=0, outgoing=0, incoming=0, opar=0, draft=0, ready=0, loading=0, complete=0, cancelled=0, unknown=0))
     totals = dict(total=0, outgoing=0, incoming=0, opar=0, draft=0, ready=0, loading=0, complete=0, cancelled=0, unknown=0)
     pb = ProgressBar(len(all_orders), message="tallying orders")
     for order in all_orders:
         pb.tick()
-        appt = order.appointment_date and order.appointment_date[:7] or False
+        appt = order.ship_date and order.ship_date[:7] or False
         if opar.get_subset((partners[order.partner_id[0]], order.local_source_document)):
             month[appt]['opar'] += 1
             totals['opar'] += 1
@@ -569,7 +569,7 @@ def update(file, directory=SOURCE):
     Add files with the structure of
 
         order={
-          'appointment_date': '20140107',
+          'ship_date': '20140107',
           'carrier_xmlid': '99',
           'cartons': '9',
           'direction': 'outgoing',
@@ -581,9 +581,17 @@ def update(file, directory=SOURCE):
           'weight': '139',
           }
 
-    to OpenERP.FnxSR.
+    to OpenERP.FnxSR, then update that entry with information from
+    FIS RDER.
     """
     logger.info('update(file=%r, directory=%r', file, directory)
+    global fis_orders, fis_purchases
+    print('connecting to OpenERP')
+    connect_oe(HOST, DB, USER, PW)
+    print('gathering orders from FIS')
+    fis_orders = fisData(36, subset='10%6s')
+    print('gathering purchases from FIS')
+    fis_purchases = fisData(219, subset='10%5s')
     if file:
         files = [file]
         lock = None
@@ -606,42 +614,37 @@ def update(file, directory=SOURCE):
             lock.release()
         raise SystemExit('unable to connect to OpenERP server')
     try:
-        failed = []
         failures = False
         bad_orders = []
-        for group in ((files, failed), ):
-            time.sleep(5)
-            trying, failing = group
-            for file in trying:
-                try:
-                    order = get_order(file)
-                    if order.local_source_document[0].isalpha():
-                        dest = ERRORS
-                    else:
-                        update_order(order)
-                        dest = ARCHIVE
-                except MissingPartner as exc:
-                    echo('%s: %s (skipping)' % (file.filename, exc.message or exc.args), border='lined')
-                    dest = None
-                except (BadFormat, CancelledOrder) as exc:
-                    error('%s: %s' % (file, exc.message or exc.args))
-                    with open(file) as f:
-                        data = '================\n%s\n----------------\n' % file
-                        data += f.read() + '\n'
-                        bad_orders.append(data)
-                    # failing.append('%s: %s' % (file, exc.message or exc.args))
+        for file in files:
+            try:
+                order = get_order(file)
+                if order.local_source_document[0].isalpha():
                     dest = ERRORS
-                    failures = True
-                except (Exception, ), exc:
-                    error('%s: %s' % (file, exc.message or exc.args))
-                    # failing.append('%s: %s' % (file, exc.message or exc.args))
-                    dest = None
-                    failures = True
-                    continue
-                if dest:
-                    archive(file, dest)
+                else:
+                    update_order(order)
+                    dest = ARCHIVE
+            except MissingPartner as exc:
+                echo('%s: %s (skipping)' % (file.filename, exc.message or exc.args), border='lined')
+                dest = None
+            except (BadFormat, CancelledOrder, MissingFIS) as exc:
+                error('%s: %s' % (file, exc.message or exc.args))
+                with open(file) as f:
+                    data = '================\n%s\n----------------\n' % file
+                    data += f.read() + '\n'
+                    bad_orders.append(data)
+                # failing.append('%s: %s' % (file, exc.message or exc.args))
+                dest = ERRORS
+                failures = True
+            except (Exception, ), exc:
+                error('%s: %s' % (file, exc.message or exc.args))
+                # failing.append('%s: %s' % (file, exc.message or exc.args))
+                dest = None
+                failures = True
+                continue
+            if dest:
+                archive(file, dest)
         if failures:
-            # raise Exception("Unable to process orders:\n\t%s" % '\n\t'.join(failed))
             error('\n'.join(bad_orders))
             raise SystemExit(-1)
     finally:
@@ -676,6 +679,9 @@ class MissingPartner(Exception):
 
 class CancelledOrder(Exception):
     "order has been cancelled"
+
+class MissingFIS(Exception):
+    "unable to find document in FIS"
 
 def archive(src_file, dest=ARCHIVE):
     src_file = Path(src_file)
@@ -781,6 +787,8 @@ def sync_fis(show_missing, reopen, orders):
     print('gathering purchases from FIS')
     fis_purchases = fisData(219, subset='10%5s')
     print('gathering orders from OpenERP')
+    #
+    # oi = open invoices; op = open purchases; ci = closed invoices; cp = closed purchased
     oi_dmn = [('state','not in', ['cancelled', 'complete']),('direction','=','outgoing')]
     op_dmn = [('state','not in', ['cancelled', 'complete']),('direction','=','incoming')]
     ci_dmn = [('state','in', ['cancelled', 'complete']),('direction','=','outgoing'),('check_out','=',False)]
@@ -789,7 +797,7 @@ def sync_fis(show_missing, reopen, orders):
         for dmn in (oi_dmn, op_dmn, ci_dmn, cp_dmn):
             dmn.append(('local_source_document','in',orders))
     open_invoices = OE.fnx_shipping.search_read(
-            fields=['id', 'appointment_date', 'local_source_document', 'state'],
+            fields=['id', 'ship_date', 'local_source_document', 'state'],
             domain=oi_dmn,
             )
     open_purchases = OE.fnx_shipping.search_read(
@@ -909,8 +917,11 @@ def sync_fis(show_missing, reopen, orders):
     # dates
     changed_shipping = 0
     still_open_invoices = OE.fnx_shipping.search_read(
-            fields=['id', 'appointment_date', 'local_source_document', 'state'],
-            domain=oi_dmn+[('appointment_time','=',0)],
+            fields=[
+                'id', 'ship_date', 'local_source_document', 'state', 'partner_number',
+                'ship_to_code', 'order_date', 'wanted_date', 'ship_date',
+                ],
+            domain=oi_dmn,
             )
     for order in ProgressView(
             iterable=still_open_invoices,
@@ -919,6 +930,7 @@ def sync_fis(show_missing, reopen, orders):
         ):
         found = fis_orders.get_subset(order.local_source_document)
         for key, record in found:
+            fis_data = PropertyDict()
             # will only be one record
             try:
                 fis_ship_date = fix_date(record[F36.ship_date], format='ymd')
@@ -928,27 +940,21 @@ def sync_fis(show_missing, reopen, orders):
                         '%6s: ship-date -> %r [bad data, no action]',
                         order.local_source_document, record[F36.ship_date],
                         )
-                continue
-            erp_ship_date = date(order.appointment_date)
-            if fis_ship_date is not None and fis_ship_date != erp_ship_date:
-                fis_ship_date = fis_ship_date.strftime('%Y%m%d')
-                changed_shipping += 1
-                logger.debug(
-                        '%6s: ship-date -> %r [updating]',
-                        order.local_source_document, fis_ship_date,
-                        )
-                OE.fnx_shipping.write(
-                        order.id,
-                        {'appointment_date':fis_ship_date, 'appointment_time': 0},
-                        )
-            else:
-                logger.debug(
-                        '%6s: ship-date -> %r [no data, no action]',
-                        order.local_source_document, record[F36.ship_date],
-                        )
+                fis_ship_date = False
+            fis_data.partner_number = record[F36.partner_number]
+            fis_data.ship_to_code = record[F36.ship_to_code]
+            fis_data.order_date = record[F36.order_date]
+            fis_data.wanted_date = record[F36.wanted_date]
+            fis_data.ship_date = fis_ship_date
+            values = {}
+            for setting, fis_value in fis_data.items():
+                if fis_value and order[setting] != fis_value:
+                    values[setting] = fis_value
+            if values:
+                OE.fnx_shipping.write(order.id, values)
     still_open_purchases = OE.fnx_shipping.search_read(
-            fields=['id', 'appointment_date', 'local_source_document', 'state'],
-            domain=op_dmn+[('appointment_time','=',0)],
+            fields=['id', 'ship_date', 'local_source_document', 'state'],
+            domain=op_dmn,
             )
     for order in ProgressView(
             iterable=still_open_purchases,
@@ -968,7 +974,7 @@ def sync_fis(show_missing, reopen, orders):
                         order.local_source_document, record[F219.eta_date],
                         )
                 continue
-            erp_eta_date = date(order.appointment_date)
+            erp_eta_date = date(order.ship_date)
             if fis_eta_date is not None and fis_eta_date != erp_eta_date:
                 fis_eta_date = fis_eta_date.strftime('%Y%m%d')
                 changed_shipping += 1
@@ -976,10 +982,7 @@ def sync_fis(show_missing, reopen, orders):
                         '%6s: ship-date -> %r [updating]',
                         order.local_source_document, fis_eta_date,
                         )
-                OE.fnx_shipping.write(
-                        order.id,
-                        {'appointment_date':fis_eta_date, 'appointment_time': 0},
-                        )
+                OE.fnx_shipping.write(order.id, {'ship_date':fis_eta_date})
             else:
                 logger.debug(
                         '%6s: ship-date -> %r [no data, no action]',
@@ -1029,6 +1032,13 @@ def update_order(values):
     # local_contact is the falcon user
     #
     # appointment_date -> 20140107
+    #
+    # FIXME: appointment_date is actually an estimated ship date -- manually changing that
+    # field until the update file is corrected
+
+    if 'appointment_date' in values:
+        values.ship_date = values.pop('appointment_date')
+    #
     # carrier_xmlid --> 99
     # cartons --> 9
     # direction --> outgoing
@@ -1039,12 +1049,19 @@ def update_order(values):
     # partner_xmlid --> AWGRO
     # weight --> 139
     print('------', verbose=2)
-    print('processsing order:  %7s...' % (values.local_source_document,), end=' ')
+    print('processsing shipping record for:  %7s...' % (values.local_source_document,), end=' ')
     context = {'active_test': False}
+    original_values = values.copy()
+    #
+    # check for local document
+    #
     if not values.local_source_document:
         raise BadFormat('missing local source document')
     local_contacts = values.pop('local_contact', None)
     print('\n  local_contacts:', local_contacts, verbose=2)
+    #
+    # check for local contacts
+    #
     if local_contacts is not None:
         local_contacts = [lc for lc in set(local_contacts) if lc not in ('sysadmin', 'rgiannini')]
         records = OE.res_users.search_read(fields=['id', 'partner_id'], domain=[('login','in',local_contacts)], context=context)
@@ -1067,6 +1084,9 @@ def update_order(values):
                 raise MissingPartner('unable to find partner %r in OpenERP' % partner_xmlid)
         partner_id = records[0]['id']
         values.partner_id = context['default_partner_id'] = partner_id
+    #
+    # check carrier
+    #
     carrier_xmlid = values.pop('carrier_xmlid', None)
     if carrier_xmlid not in (None, ):
         records = OE.res_partner.search_read(
@@ -1078,70 +1098,136 @@ def update_order(values):
             raise MissingPartner('unable to find carrier %r in OpenERP' % carrier_xmlid)
         carrier_id = records[0]['id']
         values.carrier_id = carrier_id
+    # 
+    # check cartons, pallets, weight
+    #
     if 'cartons' in values:
         values.cartons = int(values.cartons) or False
     if 'pallets' in values:
         values.pallets = int(values.pallets) or False
     if 'weight' in values:
         values.weight = float(values.weight) or False
+    #
+    # check direction
+    #
     direction = values.get('direction')
-    if direction is None and 'cartons' in values or 'pallets' in values or 'weight' in values:
-        # only present on outgoing orders
-        direction = 'outgoing'
+    if direction is None:
+        if (
+            'cartons' in values
+            or 'pallets' in values
+            or 'weight' in values
+            or len(values.local_source_document) == 6
+        ):
+            direction = 'outgoing'
+        else:
+            direction = 'incoming'
     if direction == 'incoming':
         values.job_title = values.preposition = values.partner_source_document_type = 'purchasing'
     elif direction == 'outgoing':
         values.job_title = values.preposition = values.partner_source_document_type = 'sales'
+    #
+    # look for existing shipping record
+    #
     orders = OE.fnx_shipping.search_read(
-            fields=['id','appointment_time'],
+            fields=['id'],
             domain=[('local_source_document','=',values.local_source_document)],
             context=context,
             )
     if len(orders) > 1:
         raise ValueError(
-                'found more than one order matching %r: %r'
+                'found more than one shipping record matching %r: %r'
                 % (values.local_source_document, [r.id for r in orders])
                 )
     elif len(orders) == 1:
-        order = orders[0]
-        if order.appointment_time:
-            values.pop('appointment_date', None)
+        oe_record = orders[0]
     else:
-        order = None
-    print('  order:', order, verbose=2)
-    if not order:
-        if not direction:
-            raise BadFormat('cannot create new document %r without a direction' % values.local_source_document)
+        oe_record = None
+    print('  shipping record:', oe_record, verbose=2)
+    #
+    # check for sales rep
+    #
     login = values.pop('user', None)
     if login:
         records = OE.res_users.search_read(fields=['id'], domain=[('login','=',login)])
         values.login_id = records[0]['id']
-    if not order:
+    #
+    # find matching FIS record and grab needed values
+    #
+    if direction == 'outgoing':
+        # invoice
+        found = fis_orders.get_subset(oe_record.local_source_document)
+        if len(found) > 1:
+            raise ValueError(
+                    'found more than one invoice matching %r: %r'
+                    % (values.local_source_document, [r.id for r in found])
+                    )
+        elif len(found) == 1:
+            fis_record = found[0]
+        else:
+            raise MissingFIS(
+                    'unable to find invoice %r\ndetails: %r'
+                    % (values.local_source_docmunt, original_values)
+                    )
+        extra = PropertyDict()
+        extra.partner_number = fis_record[F36.sales_rep_id] or False
+        extra.ship_to_code = fis_record[F36.ship_to_id] or False
+        extra.order_date = fix_date(fis_record[F36.order_date], format='ymd')
+        extra.wanted_date = fix_date(fis_record[F36.date_wanted], format='ymd')
+        extra.ship_date = fix_date(fis_record[F36.ship_date], format='ymd')
+    elif direction == 'incoming':
+        # purchase order
+        found = fis_purchases.get_subset(oe_record.local_source_document)
+        if len(found) > 1:
+            raise ValueError(
+                    'found more than one purchase order matching %r: %r'
+                    % (values.local_source_document, [r.id for r in found])
+                    )
+        elif len(found) == 1:
+            fis_record = found[0]
+        else:
+            raise MissingFIS(
+                    'unable to find purchase order %r\ndetails: %r'
+                    % (values.local_source_docmunt, original_values)
+                    )
+        extra = PropertyDict()
+    else:
+        raise Exception('failed to calculate direction for %r' % (original_values, ))
+    #
+    # update values with FIS information:
+    #
+    if not oe_record:
+        # add all extra info from FIS
+        values.update(extra)
         try:
             print('  creating:\n', values, verbose=2)
             OE.fnx_shipping.create(dict(values), context=dict(context))
             print('  created')
         except xmlrpclib.ProtocolError, exc:
             print('  failed')
-            raise BadFormat('Order %s: %s' % (order, (exc)))
+            raise BadFormat('Order %s: %s' % (oe_record, (exc)))
         except Exception, exc:
             print('  failed')
             error(exc)
             raise
     else:
+        # add changed info from FIS
+        for setting, new_value in extra.items():
+            if oe_record[setting] != new_value:
+                values[setting] = new_value
         try:
             print('  updating:', values.items(), verbose=2)
-            OE.fnx_shipping.write([order['id']], dict(values))
+            OE.fnx_shipping.write([oe_record['id']], dict(values))
             print('  updated')
         except xmlrpclib.ProtocolError, exc:
             print('  failed')
-            raise BadFormat('Order %s: %s' % (order, (exc)))
+            raise BadFormat('Order %s: %s' % (oe_record, (exc)))
         except xmlrpclib.Fault, exc:
-            if 'This order has been cancelled.' in str(exc):
-                raise CancelledOrder('Order has been cancelled [id: %s]' % (order['id'],))
-                print('  order has been cancelled')
+            if 'This shipping record has been cancelled.' in str(exc):
+                print('  shipping record has been cancelled')
+                raise CancelledOrder('Order has been cancelled [id: %s]' % (oe_record['id'],))
             else:
                 print('  failed')
+                raise
         except Exception, exc:
             print('  failed')
             error(exc)
@@ -1160,7 +1246,7 @@ def connect_oe(hostname, database, user, password):
 
 
 order_template = {
-    'appointment_date': False,
+    'ship_date': False,
     'carrier_xmlid': False,
     'cartons': False,
     'direction': False,
@@ -1219,74 +1305,6 @@ def print_table(*dicts):
             line.append('%-*s' % (col_widths[col], val))
         echo(' ' + '   '.join(line))
         last_dict = order
-
-class F36(str, Enum):
-    """
-    RDERH - OPEN ORDER HEADER MAINTENANCE & INQUIRY
-    """
-    company_id                   = 'An$(1,2)'      # Company Code
-    order_no                     = 'An$(3,6)'      # Order No
-    release_no                   = 'An$(9,2)'      # Release No
-    type_0000                    = 'An$(11,4)'     # TYPE = '0000'
-    inv_flag                     = 'Kn$(4,1)'      # Invoice Flag
-    ship_date                    = 'Mn$(7,6)'      # Ship Date
-
-class F219(str, Enum):
-    """
-    POHF - PURCHASE ORDER HEADER FILE
-    """
-    company_id          = 'An$(1,2)'      # COMPANY CODE
-    po_no               = 'An$(3,5)'      # P/O NUMBER
-    release_no          = 'An$(8,2)'      # RELEASE NUMBER
-    supplier_no         = 'Bn$'           # SUPPLIER NUMBER
-    supplier_name       = 'Cn$'           # SUPPLIER NAME
-    addr_line_1         = 'Dn$'           # ADDR LINE 1
-    addr_line_2         = 'En$'           # ADDR LINE 2
-    addr_line_3         = 'Fn$'           # ADDR LINE 3
-    order_placed_by_for = 'Gn$'           # ORDER PLACED BY/FOR
-    order_issued_to     = 'Hn$'           # ORDER ISSUED TO
-    terms               = 'In$'           # TERMS
-    fob                 = 'Jn$'           # F.O.B.
-    po_reg_flag         = 'Kn$(1,1)'      # P/O REG FLAG
-    vouchered           = 'Kn$(2,1)'      # Vouchered (Y/N)
-                                          # (open) Kn$(3,1)
-    print_flag          = 'Kn$(4,1)'      # PRINT FLAG
-                                          # (open) Kn$(5,1)
-    ammended_p_o        = 'Kn$(6,1)'      # Ammended P/O?
-    confirmed_flag      = 'Kn$(7,1)'      # CONFIRMED FLAG
-                                          # (open) Kn$(8,1)
-    po_recvd_complete   = 'Kn$(9,1)'      # P.O. RECVD COMPLETE?
-    terms_id            = 'Kn$(10,1)'     # TERMS CODE
-    taxable             = 'Kn$(11,1)'     # TAXABLE?
-    carrier_id          = 'Kn$(12,2)'     # Carrier Code
-    voucher_no          = 'Kn$(14,6)'     # Voucher Number
-    warehouse           = 'Kn$(20,4)'     # WAREHOUSE (I/C)
-    warehouse           = 'Kn$(24,4)'     # WAREHOUSE (DEL)
-    fob_id              = 'Kn$(28,2)'     # FOB CODE
-    po_type             = 'Kn$(30,2)'     # P/O Type
-    used                = 'Kn$(32,1)'     # Used
-    prod_order          = 'Kn$(33,1)'     # Production Order?
-                                          # (open) Kn$(34,7)
-    order_date          = 'On$(1,6)'      # ORDER DATE
-    eta_date            = 'On$(7,6)'      # ETA DATE
-    date_wanted         = 'Pn$(1,8)'      # DATE WANTED
-    date_ammended       = 'Pn$(9,8)'      # Date Ammended
-    carrier             = 'Qn$'           # CARRIER
-    last_rec_date       = 'Rn$'           # LAST REC DATE
-    disc_types          = 'Sn$(1,3)'      # Discount Types
-    freight_type        = 'Sn$(4,1)'      # Freight Type
-                                          # (open) An
-    total_units         = 'Tn'            # TOTAL UNITS
-    total_weight        = 'Un'            # TOTAL WEIGHT
-    total_amt           = 'Vn'            # TOTAL AMOUNT
-    no_of_lines         = 'Wn'            # Number of Lines
-    operator_id         = 'Xn$'           # Operator Code
-    disc_1_rate_amt     = 'Tt(1)'         # Disc 1 - Rate/Amt
-    disc_2_rate_amt     = 'Tt(2)'         # Disc 2 - Rate/Amt
-    disc_3_rate_amt     = 'Tt(3)'         # Disc 3 - Rate/Amt
-    freight_rate_amt    = 'Tt(4)'         # Freight Rate/Amt
-    no_of_pallets       = 'Tt(5)'         # Number of Pallets
-
 
 
 with user_ids(0, 0):
