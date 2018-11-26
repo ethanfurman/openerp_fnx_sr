@@ -185,6 +185,8 @@ class fnx_sr_shipping(osv.Model):
         'partner_source_document_type': fields.selection([('sales', 'Purchase Order:'), ('purchasing', 'Sales Order:')], 'Type of order'),
         'partner_source_document': fields.char('Their document', size=32),
         'partner_id': fields.many2one('res.partner', 'Partner', required=False, ondelete='restrict'),
+        'partner_number': fields.char('Customer #', size=6),
+        'ship_to_code': fields.char('Ship To code', size=4),
         #
         'weight': fields.float('Weight'),
         'cartons': fields.integer('# of cartons'),
@@ -192,6 +194,9 @@ class fnx_sr_shipping(osv.Model):
         'comment': fields.text('Comments', help="Comment or instructions for this order only."),
         #
         'carrier_id': fields.many2one('res.partner', 'Shipper', domain=[('is_carrier','=',True)]),
+        'order_date': fields.date('Date order placed'),
+        'wanted_date': fields.date('Date order wanted'),
+        'ship_date': fields.date('Estimated ship date'),
         'appointment_date': fields.date('Appointment date', help="Date when driver should arrive."),
         'appointment_time': fields.char('Appointment time', size=5, help='Time when driver should arrive.'),
         'appointment': fields.function(
