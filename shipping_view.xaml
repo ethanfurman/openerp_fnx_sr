@@ -67,18 +67,24 @@
                                     ~button @sr_uncheckin $Undo_Check-In groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False}"
                                     ~button @sr_checkout_partial $Partial_Order_Complete groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False, 'fnxsr_shipments': shipments, 'fnxsr_checkin': check_in}"
                                     ~button @sr_checkout_full $Full_Order_Complete groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False, 'fnxsr_shipments': shipments, 'fnxsr_checkin': check_in}"
-                        ~group
-                            ~group
+                        ~hr
+                        ~group $Customer_Order_Info
+                            ~group attrs="{'invisible': [('direction','=','incoming')]}"
+                                @partner_number readonly='1'
+                                @ship_to_code readonly='1'
                                 @order_date readonly='1'
                                 @wanted_date readonly='1'
                                 @ship_date readonly='1'
-                            ~group
-                                @partner_number readonly='1'
-                                @ship_to_code readonly='1'
+                            ~group attrs="{'invisible': [('direction','=','incoming')]}"
+                                @carrier_tracking_no
+                                @carrier_appt_delivery_date
+                                @carrier_actual_delivery_date
+                        ~group $Local_Data
                             ~group
                                 @appointment_date .oe_edit_only
                                 @appointment_time .oe_edit_only on_change='onchange_appt_time(appointment_time)'
                                 @appointment .oe_view_only
+                                @appt_scheduled_by_id writeonly="groups('fnx_sr.group_fnx_sr_manager')"
                                 ~separator colspan='2'
                                 @check_in writeonly="groups('fnx_sr.group_fnx_sr_manager')"
                                 @check_out writeonly="groups('fnx_sr.group_fnx_sr_manager')"
@@ -89,8 +95,7 @@
                                 @pallets attrs="{'readonly':True}"
                                 ~button @button_reset $Clear_Pallet_Count .oe_view_only type='object' states='ready' groups='fnx_sr.group_fnx_sr_manager' .oe_right colspan='2'
                                 ~separator colspan='2'
-                                @appt_scheduled_by_id writeonly="groups('fnx_sr.group_fnx_sr_manager')"
-                                @appt_confirmed_on writeonly="groups('fnx_sr.group_fnx_sr_manager')"
+                                //@appt_confirmed_on writeonly="groups('fnx_sr.group_fnx_sr_manager')"
                                 @container
                         ~group
                             ~group $Order_Comments

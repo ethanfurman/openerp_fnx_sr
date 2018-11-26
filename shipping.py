@@ -222,6 +222,9 @@ class fnx_sr_shipping(osv.Model):
         'container': fields.char('Container ID', size=20),
         'partial_complete': fields.boolean('Partially complete', oldname='partial_receipt'),
         'shipments': fields.text('Shipments'),
+        'carrier_tracking_no': fields.char('Tracking #', size=64),
+        'carrier_appt_delivery_date': fields.date('Scheduled Delivery Date'),
+        'carrier_actual_delivery_date': fields.date('Actual Delivery Date'),
         }
 
     _sql_constraints = [ ('lsd_unique', 'unique(local_source_document)', 'Already have that source document in the system') ]
