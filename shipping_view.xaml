@@ -68,8 +68,8 @@
                                     ~button @sr_checkout_partial $Partial_Order_Complete groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False, 'fnxsr_shipments': shipments, 'fnxsr_checkin': check_in}"
                                     ~button @sr_checkout_full $Full_Order_Complete groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False, 'fnxsr_shipments': shipments, 'fnxsr_checkin': check_in}"
                         ~hr
-                        ~group $Customer_Order_Info
-                            ~group attrs="{'invisible': [('direction','=','incoming')]}"
+                        ~group $Customer_Order_Info attrs="{'invisible': [('direction','=','incoming')]}"
+                            ~group
                                 @partner_number readonly='1'
                                 @ship_to_code readonly='1'
                                 @order_date readonly='1'
