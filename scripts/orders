@@ -1176,7 +1176,7 @@ def update_order(values):
         extra.ship_date = fix_date(fis_record[F36.ship_date], format='ymd')
     elif direction == 'incoming':
         # purchase order
-        found = fis_purchases.get_subset(oe_record.local_source_document)
+        found = fis_purchases.get_subset(values.local_source_document)
         if len(found) > 1:
             raise ValueError(
                     'found more than one purchase order matching %r: %r'
@@ -1204,7 +1204,7 @@ def update_order(values):
             print('  created')
         except xmlrpclib.ProtocolError, exc:
             print('  failed')
-            raise BadFormat('Order %s: %s' % (oe_record, (exc)))
+            raise BadFormat('Order %s: %s' % (values.local_source_document, (exc)))
         except Exception, exc:
             print('  failed')
             error(exc)
@@ -1220,7 +1220,7 @@ def update_order(values):
             print('  updated')
         except xmlrpclib.ProtocolError, exc:
             print('  failed')
-            raise BadFormat('Order %s: %s' % (oe_record, (exc)))
+            raise BadFormat('Order %s: %s' % (values.local_source_document, (exc)))
         except xmlrpclib.Fault, exc:
             if 'This shipping record has been cancelled.' in str(exc):
                 print('  shipping record has been cancelled')
