@@ -5,7 +5,7 @@ from __future__ import print_function
 
 from collections import defaultdict
 from dbf import Date, DateTime, Time
-from enum import IntEnum
+from aenum import Enum, IntEnum
 from pandaemonium import PidLockFile, AlreadyLocked
 from scandir import scandir
 from scription import *
@@ -15,7 +15,7 @@ from antipathy import Path
 from VSS.time_machine import PropertyDict
 from VSS.utils import ProgressBar
 from logging import INFO, getLogger, Formatter, handlers
-from openerplib import get_connection, get_records
+from openerplib import get_connection, get_records, Many2One, DEFAULT_SERVER_DATE_FORMAT
 from openerplib.dates import LOCAL_TIME
 from updates.fis_schema import F36, F219
 import os
@@ -227,7 +227,7 @@ def fix_carriers():
         if carrier_xmlid in shippers:
             carrier_id = shippers[carrier_xmlid]
             values = {'carrier_id':carrier_id}
-            OE.fnx_shipping.write([sr.id], values)
+            OE.fnx_shipping.write([sr.id], pfm(values))
 
 
 @Command()
@@ -637,6 +637,7 @@ def update(file, directory=SOURCE):
                 dest = ERRORS
                 failures = True
             except (Exception, ), exc:
+                raise
                 error('%s: %s' % (file, exc.message or exc.args))
                 # failing.append('%s: %s' % (file, exc.message or exc.args))
                 dest = None
@@ -951,7 +952,7 @@ def sync_fis(show_missing, reopen, orders):
                 if fis_value and order[setting] != fis_value:
                     values[setting] = fis_value
             if values:
-                OE.fnx_shipping.write(order.id, values)
+                OE.fnx_shipping.write(order.id, pfm(values))
     still_open_purchases = OE.fnx_shipping.search_read(
             fields=['id', 'ship_date', 'local_source_document', 'state'],
             domain=op_dmn,
@@ -1050,6 +1051,7 @@ def update_order(values):
     # weight --> 139
     print('------', verbose=2)
     print('processsing shipping record for:  %7s...' % (values.local_source_document,), end=' ')
+    print('\n%s' % values, verbose=3)
     context = {'active_test': False}
     original_values = values.copy()
     #
@@ -1067,6 +1069,8 @@ def update_order(values):
         records = OE.res_users.search_read(fields=['id', 'partner_id'], domain=[('login','in',local_contacts)], context=context)
         print('  found:\n', '\n'.join(repr(r) for r in records), verbose=2)
         values.message_follower_ids = [lc['partner_id'][0] for lc in records]
+        if records:
+            values.local_contact_id = records[0]['partner_id']
     partner_xmlid = values.pop('partner_xmlid', None)
     if partner_xmlid is not None:
         records = OE.res_partner.search_read(
@@ -1129,7 +1133,7 @@ def update_order(values):
     # look for existing shipping record
     #
     orders = OE.fnx_shipping.search_read(
-            fields=['id'],
+            fields=['id','partner_number','ship_to_code','order_date','wanted_date','ship_date'],
             domain=[('local_source_document','=',values.local_source_document)],
             context=context,
             )
@@ -1153,27 +1157,27 @@ def update_order(values):
     #
     # find matching FIS record and grab needed values
     #
+    extra = PropertyDict()
     if direction == 'outgoing':
         # invoice
-        found = fis_orders.get_subset(oe_record.local_source_document)
+        found = fis_orders.get_subset(values.local_source_document)
         if len(found) > 1:
             raise ValueError(
                     'found more than one invoice matching %r: %r'
                     % (values.local_source_document, [r.id for r in found])
                     )
         elif len(found) == 1:
-            fis_record = found[0]
+            fis_record = found[0][1]
+            extra.partner_number = fis_record[F36.cust_no] or False
+            extra.ship_to_code = fis_record[F36.ship_to_id] or False
+            extra.order_date = fix_date(fis_record[F36.order_date], format='ymd')
+            extra.wanted_date = fix_date(fis_record[F36.date_wanted], format='ymd')
+            extra.ship_date = fix_date(fis_record[F36.ship_date], format='ymd')
         else:
-            raise MissingFIS(
+            error(
                     'unable to find invoice %r\ndetails: %r'
-                    % (values.local_source_docmunt, original_values)
+                    % (values.local_source_document, original_values)
                     )
-        extra = PropertyDict()
-        extra.partner_number = fis_record[F36.sales_rep_id] or False
-        extra.ship_to_code = fis_record[F36.ship_to_id] or False
-        extra.order_date = fix_date(fis_record[F36.order_date], format='ymd')
-        extra.wanted_date = fix_date(fis_record[F36.date_wanted], format='ymd')
-        extra.ship_date = fix_date(fis_record[F36.ship_date], format='ymd')
     elif direction == 'incoming':
         # purchase order
         found = fis_purchases.get_subset(values.local_source_document)
@@ -1185,11 +1189,10 @@ def update_order(values):
         elif len(found) == 1:
             fis_record = found[0]
         else:
-            raise MissingFIS(
+            error(
                     'unable to find purchase order %r\ndetails: %r'
-                    % (values.local_source_docmunt, original_values)
+                    % (values.local_source_document, original_values)
                     )
-        extra = PropertyDict()
     else:
         raise Exception('failed to calculate direction for %r' % (original_values, ))
     #
@@ -1200,7 +1203,7 @@ def update_order(values):
         values.update(extra)
         try:
             print('  creating:\n', values, verbose=2)
-            OE.fnx_shipping.create(dict(values), context=dict(context))
+            OE.fnx_shipping.create(pfm(values), context=dict(context))
             print('  created')
         except xmlrpclib.ProtocolError, exc:
             print('  failed')
@@ -1216,7 +1219,7 @@ def update_order(values):
                 values[setting] = new_value
         try:
             print('  updating:', values.items(), verbose=2)
-            OE.fnx_shipping.write([oe_record['id']], dict(values))
+            OE.fnx_shipping.write([oe_record['id']], pfm(values))
             print('  updated')
         except xmlrpclib.ProtocolError, exc:
             print('  failed')
@@ -1305,6 +1308,23 @@ def print_table(*dicts):
             line.append('%-*s' % (col_widths[col], val))
         echo(' ' + '   '.join(line))
         last_dict = order
+
+
+def pfm(values):
+    "prepare values dict for marshalling"
+    result = {}
+    for k, v in values.items():
+        if not v:
+            result[k] = False
+        elif isinstance(v, Date):
+            result[k] = v.strftime(DEFAULT_SERVER_DATE_FORMAT)
+        elif isinstance(v, Many2One):
+            result[k] = v.id
+        elif isinstance(v, Enum):
+            result[k] = v.value
+        else:
+            result[k] = v
+    return result
 
 
 with user_ids(0, 0):
