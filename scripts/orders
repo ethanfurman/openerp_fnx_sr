@@ -585,13 +585,7 @@ def update(file, directory=SOURCE):
     FIS RDER.
     """
     logger.info('update(file=%r, directory=%r', file, directory)
-    global fis_orders, fis_purchases
-    print('connecting to OpenERP')
-    connect_oe(HOST, DB, USER, PW)
-    print('gathering orders from FIS')
-    fis_orders = fisData(36, subset='10%6s')
-    print('gathering purchases from FIS')
-    fis_purchases = fisData(219, subset='10%5s')
+    global fis_orders, fis_purchases, oe_carriers
     if file:
         files = [file]
         lock = None
@@ -608,11 +602,25 @@ def update(file, directory=SOURCE):
             lock.release()
             return
     try:
+        print('connecting to OpenERP')
         connect_oe(HOST, DB, USER, PW)
     except socket.error:
         if lock:
             lock.release()
         raise SystemExit('unable to connect to OpenERP server')
+    print('gathering carriers from OpenERP')
+    oe_carriers = dict([
+        (r['xml_id'], r['id'])
+        for r in get_records(
+            OE.conn, 'res.partner',
+            fields=['id','xml_id'],
+            domain=[('module','=',fis_module['carrier'])],
+            )
+        ])
+    print('gathering orders from FIS')
+    fis_orders = fisData(36, subset='10%6s')
+    print('gathering purchases from FIS')
+    fis_purchases = fisData(219, subset='10%5s')
     try:
         failures = False
         bad_orders = []
@@ -1093,14 +1101,9 @@ def update_order(values):
     #
     carrier_xmlid = values.pop('carrier_xmlid', None)
     if carrier_xmlid not in (None, ):
-        records = OE.res_partner.search_read(
-                fields=['id'],
-                domain=[('module','=',fis_module['carrier']),('xml_id','=',carrier_xmlid)],
-                context=context,
-                )
-        if not records:
+        carrier_id = oe_carriers.get(carrier_xmlid)
+        if carrier_id is None:
             raise MissingPartner('unable to find carrier %r in OpenERP' % carrier_xmlid)
-        carrier_id = records[0]['id']
         values.carrier_id = carrier_id
     # 
     # check cartons, pallets, weight
@@ -1187,7 +1190,11 @@ def update_order(values):
                     % (values.local_source_document, [r.id for r in found])
                     )
         elif len(found) == 1:
-            fis_record = found[0]
+            fis_record = found[0][1]
+            extra.partner_number = fis_record[F219.supplier_no]
+            extra.order_date = fix_date(fis_record[F219.order_date], 'ymd')
+            extra.wanted_date = fix_date(fis_record[F219.date_wanted].replace('/',''), 'mdy')
+            extra.ship_date = fix_date(fis_record[F219.eta_date], 'ymd')
         else:
             error(
                     'unable to find purchase order %r\ndetails: %r'
