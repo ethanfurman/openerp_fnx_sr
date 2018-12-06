@@ -26,5 +26,5 @@
             @implied_ids eval="[(4, ref('group_fnx_sr_user'))]"
             @users eval="[(4, ref('base.user_root'))]"
 
-        ~record model='res.users' #user_fis_daemon
+        ~record model='res.users' id='fis_integration.user_fis_daemon'
             @groups_id eval="[(4, ref('group_fnx_sr_manager'))]"

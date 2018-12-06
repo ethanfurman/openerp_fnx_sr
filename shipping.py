@@ -8,8 +8,7 @@ from openerp.osv import fields, osv
 from openerp.exceptions import ERPError
 from openerp.tools import DEFAULT_SERVER_DATE_FORMAT, DEFAULT_SERVER_DATETIME_FORMAT
 import pytz
-import re
-from VSS.utils import float, all_equal, hrtd
+from VSS.utils import float, hrtd
 import logging
 
 # set up
@@ -271,24 +270,10 @@ class fnx_sr_shipping(osv.Model):
             values.pop('pallets')
         return super(fnx_sr_shipping, self).write(cr, uid, ids, values, context=context)
 
-    def onchange_appt_time(self, cr, uid, ids, time, context=None):
-        if isinstance(ids, (int, long)):
-            ids = [ids]
-        time = normalize_time(time)
-        res = {}
-        res['value'] = {'appointment_time': time}
-        return res
-
     def sr_checkin(self, cr, uid, ids, context=None):
         ctx = (context or {}).copy()
         if isinstance(ids, (int, long)):
             ids = [ids]
-        if len(ids) > 1:
-            # check all have the same carrier
-            records = self.browse(cr, uid, ids, context=ctx)
-            carrier_ids = [r.carrier_id.id for r in records]
-            if not all_equal(carrier_ids):
-                raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
         ctx['mail_create_nosubscribe'] = True
         values = {
                 'check_in': DateTime.now(),
@@ -299,12 +284,6 @@ class fnx_sr_shipping(osv.Model):
         ctx = (context or {}).copy()
         if isinstance(ids, (int, long)):
             ids = [ids]
-        if len(ids) > 1:
-            # check all have the same carrier
-            records = self.browse(cr, uid, ids, context=context)
-            carrier_ids = [r.carrier_id.id for r in records]
-            if not all_equal(carrier_ids):
-                raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
         ctx['mail_create_nosubscribe'] = True
         ctx['message_force'] = 'Ticket un-checked-in: reset to'
         values = {
@@ -314,15 +293,8 @@ class fnx_sr_shipping(osv.Model):
 
     def sr_checkout_partial(self, cr, uid, ids, context=None):
         ctx = (context or {}).copy()
-        print(ctx)
         if isinstance(ids, (int, long)):
             ids = [ids]
-        if len(ids) > 1:
-            # check all have the same carrier
-            records = self.browse(cr, uid, ids, context=ctx)
-            carrier_ids = [r.carrier_id.id for r in records]
-            if not all_equal(carrier_ids):
-                raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
         check_in = str_to_datetime(ctx['fnxsr_checkin'])
         check_out = local_datetime()
         shipments = ctx.get('fnxsr_shipments')
@@ -351,15 +323,8 @@ class fnx_sr_shipping(osv.Model):
 
     def sr_checkout_full(self, cr, uid, ids, context=None):
         ctx = (context or {}).copy()
-        print(ctx)
         if isinstance(ids, (int, long)):
             ids = [ids]
-        if len(ids) > 1:
-            # check all have the same carrier
-            records = self.browse(cr, uid, ids, context=ctx)
-            carrier_ids = [r.carrier_id.id for r in records]
-            if not all_equal(carrier_ids):
-                raise osv.except_osv('Error', 'Not all carriers are the same, unable to process')
         check_in = DateTime.strptime(ctx['fnxsr_checkin'], DEFAULT_SERVER_DATETIME_FORMAT)
         check_out = DateTime.now()
         shipments = ctx.get('fnxsr_shipments')
@@ -446,112 +411,3 @@ class fnx_sr_shipping(osv.Model):
                 raise ValueError('unable to process domain: %r' % arg)
         return super(fnx_sr_shipping, self).search(cr, user, args=new_args, offset=offset, limit=limit, order=order, context=context, count=count)
 
-
-class fnx_sr_shipping_schedule_appt(osv.osv_memory):
-    _name = 'fnx.sr.shipping.schedule_appt'
-    _description = 'schedule an appt for order pickup/delivery'
-
-    def get_carrier(self, cr, uid, context=None):
-        if context is None:
-            return False
-        order_ids = context.get('active_ids')
-        if order_ids is None:
-            return False
-        sr = self.pool.get('fnx.sr.shipping')
-        records = sr.browse(cr, uid, order_ids, context=context)
-        shipper = False
-        for rec in records:
-            if not rec.carrier_id:
-                continue
-            elif not rec.carrier_id.name.replace('_',''):
-                continue
-            shipper = rec.carrier_id.id
-            break
-        return shipper
-
-    _columns = {
-        'appointment_date' : fields.date('Date'),
-        'appointment_time' : fields.char('Time', size=5),
-        'carrier_id': fields.many2one('res.partner', 'Shipper', domain=[('is_carrier','=',True)]),
-        }
-
-    _defaults = {
-        'carrier_id': get_carrier,
-        }
-
-    def onchange_appt_time(self, cr, uid, ids, time, context=None):
-        if isinstance(ids, (int, long)):
-            ids = [ids]
-        time = normalize_time(time)
-        res = {}
-        res['value'] = {'appointment_time': time}
-        return res
-
-    def set_appt(self, cr, uid, ids, context=None):
-        # context contains 'active_id', 'active_ids', and 'active_model'
-        if context is None:
-            return False
-        if len(ids) > 1:
-            # should never happen
-            raise ValueError("Can only handle one id at a time")
-        order_ids = context.get('active_ids')
-        if order_ids is None:
-            return False
-        # get link to active_model
-        sr = self.pool.get('fnx.sr.shipping')
-        # get memory model record with data
-        record = self.browse(cr, uid, ids[0], context=context)
-        values = {}
-        # save to values dict
-        values['appointment_date'] = record.appointment_date
-        values['appointment_time'] = record.appointment_time
-        values['carrier_id'] = record.carrier_id.id
-        # update records in active_model
-        return sr.write(cr, uid, order_ids, values, context=context)
-
-class fnx_sr_shipping_checkin(osv.osv_memory):
-    _name = 'fnx.sr.shipping.checkin'
-    _description = 'shipping & receiving driver checkin'
-
-    def more_checkin(self, cr, uid, ids, context=None):
-        if context is None:
-            return False
-        order_ids = context['active_ids']
-        sr = self.pool.get('fnx.sr.shipping')
-        return sr.sr_checkin(cr, uid, order_ids, context=context)
-
-class fnx_sr_shipping_checkout(osv.osv_memory):
-    _name = 'fnx.sr.shipping.checkout'
-    _description = 'shipping & receiving driver checkout'
-
-    def more_checkout(self, cr, uid, ids, context=None):
-        if context is None:
-            return False
-        order_ids = context['active_ids']
-        sr = self.pool.get('fnx.sr.shipping')
-        return sr.sr_checkout(cr, uid, order_ids, context=context)
-
-
-def normalize_time(time):
-    'converts time to 24 hh:mm format'
-    if not time or not time.strip():
-        return '0:00'
-    time = time + ' '
-    m = re.search(r'^\s*(\d+)[:. ](\d\d)?\s*(.*)\s*$', time.lower())
-    if not m:
-        raise ERPError('Invalid Time', 'Unable to parse %r [no match]' % time)
-    hour, minute, meridian = m.groups()
-    hour = int(hour)
-    minute = int(minute or 0)
-    meridian = meridian.replace('.', '')
-    if meridian not in ('', 'a', 'am', 'p', 'pm'):
-        raise ERPError('Invalid Time', 'Unable to parse %r [bad meridian]' % time)
-    if meridian.startswith('a') and hour == 12:
-        hour -= 12
-    elif meridian.startswith(('a','p')) and hour > 12:
-        raise ERPError('Invalid Time', 'Unable to parse %r [bad meridian]' % time)
-    elif meridian.startswith('p') and hour < 12:
-        hour += 12
-    if not 0 <= hour <= 23 or not 0 <= minute <= 59:
-        raise ERPError('Invalid Time', '%r is not a valid time [invalid hour or minute]' % time)
-    return '%d:%02d' % (hour, minute)

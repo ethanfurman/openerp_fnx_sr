@@ -1,0 +1,124 @@
+!!! xml1.0
+~openerp
+    ~data
+
+        // schedule appointment
+
+        ~record model='ir.ui.view' #view_fnx_sr_shipping_set_appointment
+            @name: Schedule Appointment
+            @model: fnx.sr.shipping.set_appointment
+            @arch type='xml'
+                ~form $Schedule_Appointment version='7.0'
+                    ~group
+                        ~group
+                            @appointment_date attrs="{'required': [('appointment_date','=',False)]}"
+                            @appointment_time on_change='onchange_appt_time(appointment_time)' attrs="{'required': [('appointment_time','=',False)]}"
+                        ~group
+                            @carrier_id options="{'create_edit': False}" attrs="{'required': [('carrier_id','=',False)]}" $New_Carrier
+                    ~br
+                    ~div
+                        @possible_records
+                            ~tree $Shipping_Tickets create='false' editable='top' version='7.0'
+                                @current_carrier readonly='1'
+                                @current_appt readonly='1' $Current_Appt
+                                @state readonly='1'
+                                @disposition attrs="{'required': [('disposition','=',False)]}" $Action
+                                @name readonly='1'
+                                @partner readonly='1'
+                    ~footer
+                        ~button @confirm $Schedule_Appointments type='object'
+                        or
+                        ~button $Cancel .oe_link special='cancel'
+
+        ~record model='ir.actions.act_window' #action_fnx_sr_shipping_set_appointment
+            @name: Schedule Appointment
+            @type: ir.actions.act_window
+            @res_model: fnx.sr.shipping.set_appointment
+            @view_type: form
+            @view_mode: form
+            @view_id ref='view_fnx_sr_shipping_set_appointment'
+            @target: new
+            @multi: True
+
+        ~record model='ir.values' #event_fnx_sr_set_appointment
+            @name: Open Schedule Appointment Form
+            @model_id ref='fnx_sr.model_fnx_sr_shipping'
+            @value eval="'ir.actions.act_window,' + str(ref('action_fnx_sr_shipping_set_appointment'))"
+            @key: action
+            @key2: client_action_multi
+            @model: fnx.sr.shipping
+
+        // check-in
+
+        ~record model='ir.ui.view' #view_fnx_sr_shipping_checkin_tree
+            @name: Check drivers in
+            @model: fnx.sr.shipping.driver_checkin
+            @arch type='xml'
+                ~form $Driver_checkin create='false' version='7.0'
+                    @possible_records nolabel='1'
+                        ~tree $Possible_Records create='false' editable='top' version='7.0'
+                            @state readonly='1'
+                            @disposition attrs="{'readonly': [('state','not in',['draft', 'ready'])]}"
+                            @name readonly='1'
+                            @partner readonly='1'
+                    ~footer
+                        ~button @confirm $Check_in type='object'
+                        or
+                        ~button $Cancel .oe_link special='cancel'
+
+        ~record model='ir.actions.act_window' #action_fnx_sr_shipping_checkin
+            @name: Check-in Drivers
+            @type: ir.actions.act_window
+            @res_model: fnx.sr.shipping.driver_checkin
+            @view_type: form
+            @view_mode: form
+            @view_id ref='view_fnx_sr_shipping_checkin_tree'
+            @target: new
+            @multi: True
+
+        ~record model='ir.values' #event_fnx_sr_shipping_checkin
+            @name: Open Driver Check-in
+            @model_id ref='model_fnx_sr_shipping_driver_checkin'
+            @value eval="'ir.actions.act_window,' + str(ref('action_fnx_sr_shipping_checkin'))"
+            @key: action
+            @key2: client_action_multi
+            @model: fnx.sr.shipping
+
+        // check-out
+
+        ~record model='ir.ui.view' #view_fnx_sr_shipping_checkout_tree
+            @name: Check drivers out
+            @model: fnx.sr.shipping.driver_checkout
+            @arch type='xml'
+                ~form $Driver_checkout create='false' version='7.0'
+                    @possible_records nolabel='1'
+                        ~tree $Possible_Records create='false' editable='top' version='7.0'
+                            @state readonly='1'
+                            @disposition attrs="{'readonly': [('state','!=','loading')], 'required': [('disposition','=',False)]}"
+                            @name readonly='1'
+                            @partner readonly='1'
+                            @check_in readonly='1'
+                    ~footer
+                        ~button @confirm $Check_out type='object'
+                        or
+                        ~button $Cancel .oe_link special='cancel'
+
+        ~record model='ir.actions.act_window' #action_fnx_sr_shipping_checkout
+            @name: Check-out Drivers
+            @type: ir.actions.act_window
+            @res_model: fnx.sr.shipping.driver_checkout
+            @view_type: form
+            @view_mode: form
+            @view_id ref='view_fnx_sr_shipping_checkout_tree'
+            @target: new
+            @multi: True
+
+        ~record model='ir.values' #event_fnx_sr_shipping_checkout
+            @name: Open Driver Check-out
+            @model_id ref='model_fnx_sr_shipping_driver_checkout'
+            @value eval="'ir.actions.act_window,' + str(ref('action_fnx_sr_shipping_checkout'))"
+            @key: action
+            @key2: client_action_multi
+            @model: fnx.sr.shipping
+
+

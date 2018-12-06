@@ -63,10 +63,10 @@
                                         @job_title .oe_inline attrs="{'readonly':True}"
                                         @local_contact_id .oe_inline writeonly="groups('fnx_sr.group_fnx_sr_manager')"
                                 ~div class='oe_right oe_button_box'
-                                    ~button @sr_checkin $Driver_Check-In groups='fnx_sr.group_fnx_sr_user' type='object' states='draft,ready,partial' context="{'override': False}"
-                                    ~button @sr_uncheckin $Undo_Check-In groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False}"
-                                    ~button @sr_checkout_partial $Partial_Order_Complete groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False, 'fnxsr_shipments': shipments, 'fnxsr_checkin': check_in}"
-                                    ~button @sr_checkout_full $Full_Order_Complete groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'override': False, 'fnxsr_shipments': shipments, 'fnxsr_checkin': check_in}"
+                                    ~button @sr_checkin $Driver_Check-In groups='fnx_sr.group_fnx_sr_user' type='object' states='draft,ready,partial'
+                                    ~button @sr_uncheckin $Undo_Check-In groups='fnx_sr.group_fnx_sr_user' type='object' states='loading'
+                                    ~button @sr_checkout_partial $Partial_Order_Complete groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'fnxsr_shipments': shipments, 'fnxsr_checkin': check_in}"
+                                    ~button @sr_checkout_full $Full_Order_Complete groups='fnx_sr.group_fnx_sr_user' type='object' states='loading' context="{'fnxsr_shipments': shipments, 'fnxsr_checkin': check_in}"
                         ~hr
                         ~group $Order_Info
                             ~group
@@ -109,93 +109,6 @@
                     ~div .oe_chatter
                         @message_follower_ids widget='mail_followers'
                         @message_ids nolabel='1' widget='mail_thread'
-
-        ~record model='ir.ui.view' #view_fnx_sr_schedule_appt
-            @name: Schedule Appointment
-            @model: fnx.sr.shipping
-            @arch type='xml'
-                ~form $Schedule_Appointment version='7.0'
-                    ~separator $Schedule_appointment_for_selected_orders colspan='4'
-                    ~group
-                        ~group
-                            @carrier_id options="{'create':False, 'create_edit':False, 'limit':15}"
-                        ~group
-                            @appointment_date
-                            @appointment_time on_change='onchange_appt_time(appointment_time)'
-                    ~footer
-                        ~button @set_appt $Schedule type='object'
-
-        ~record model='ir.actions.act_window' #action_fnx_sr_schedule_appt
-            @name: Schedule Appointment
-            @type: ir.actions.act_window
-            @res_model: fnx.sr.shipping.schedule_appt
-            @view_type: form
-            @view_mode: form
-            @view_id ref='view_fnx_sr_schedule_appt'
-            @target: new
-            @multi: True
-
-        ~record model='ir.values' #event_fnx_sr_schedule_appt
-            @name: Open Schedule Appointment Form
-            @model_id ref='fnx_sr.model_fnx_sr_shipping'
-            @value eval="'ir.actions.act_window,' + str(ref('action_fnx_sr_schedule_appt'))"
-            @key: action
-            @key2: client_action_multi
-            @model: fnx.sr.shipping
-
-        ~record model='ir.ui.view' #view_fnx_sr_driver_checkin
-            @name: Check-in Driver
-            @model: fnx.sr.shipping
-            @arch type='xml'
-                ~form $Check-in_Driver version='7.0'
-                    ~separator string='Check in driver for selected orders?' colspan='4'
-                    ~footer
-                        ~button @more_checkin $Check-In type='object'
-
-        ~record model='ir.actions.act_window' #action_fnx_sr_driver_checkin
-            @name: Check-in Driver
-            @type: ir.actions.act_window
-            @res_model: fnx.sr.shipping.checkin
-            @view_type: form
-            @view_mode: form
-            @view_id ref='view_fnx_sr_driver_checkin'
-            @target: new
-            @multi: True
-
-        ~record model='ir.values' #event_fnx_sr_driver_checkin
-            @name: Open Driver Check-In Form
-            @model_id ref='fnx_sr.model_fnx_sr_shipping'
-            @value eval="'ir.actions.act_window,' + str(ref('action_fnx_sr_driver_checkin'))"
-            @key: action
-            @key2: client_action_multi
-            @model: fnx.sr.shipping
-
-        ~record model='ir.ui.view' #view_fnx_sr_driver_checkout
-            @name: Check-out Driver
-            @model: fnx.sr.shipping
-            @arch type='xml'
-                ~form $Check-out_Driver version='7.0'
-                    ~separator string='Check out driver for selected orders?' colspan='4'
-                    ~footer
-                        ~button @more_checkout $Check-Out type='object'
-
-        ~record model='ir.actions.act_window' #action_fnx_sr_driver_checkout
-            @name: Check-out Driver
-            @type: ir.actions.act_window
-            @res_model: fnx.sr.shipping.checkout
-            @view_type: form
-            @view_mode: form
-            @view_id ref='view_fnx_sr_driver_checkout'
-            @target: new
-            @multi: True
-
-        ~record model='ir.values' #event_fnx_sr_driver_checkout
-            @name: Open Driver Check-Out Form
-            @model_id ref='fnx_sr.model_fnx_sr_shipping'
-            @value eval="'ir.actions.act_window,' + str(ref('action_fnx_sr_driver_checkout'))"
-            @key: action
-            @key2: client_action_multi
-            @model: fnx.sr.shipping
 
         ~record model='ir.ui.view' #search_fnx_sr_open_orders
             @name: Open Orders Search

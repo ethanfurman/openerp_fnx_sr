@@ -23,6 +23,7 @@
             'shipping_data.xaml',
             'shipping_view.xaml',
             'res_partner_view.xaml',
+            'wizard/shipments_view.xaml',
         ],
     'test': [],
     'installable': True,
