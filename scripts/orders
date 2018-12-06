@@ -950,10 +950,10 @@ def sync_fis(show_missing, reopen, orders):
                         order.local_source_document, record[F36.ship_date],
                         )
                 fis_ship_date = False
-            fis_data.partner_number = record[F36.partner_number]
-            fis_data.ship_to_code = record[F36.ship_to_code]
-            fis_data.order_date = record[F36.order_date]
-            fis_data.wanted_date = record[F36.wanted_date]
+            fis_data.partner_number = record[F36.cust_no]
+            fis_data.ship_to_code = record[F36.ship_to_id]
+            fis_data.order_date = fix_date(record[F36.order_date], format='ymd')
+            fis_data.wanted_date = fix_date(record[F36.date_wanted], format='ymd')
             fis_data.ship_date = fis_ship_date
             values = {}
             for setting, fis_value in fis_data.items():
