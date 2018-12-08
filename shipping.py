@@ -10,6 +10,7 @@ from openerp.tools import DEFAULT_SERVER_DATE_FORMAT, DEFAULT_SERVER_DATETIME_FO
 import pytz
 from VSS.utils import float, hrtd
 import logging
+import re
 
 # set up
 
@@ -62,45 +63,49 @@ class fnx_sr_shipping(osv.Model):
             result[record.id] = {'incoming':'PO ', 'outgoing':'Inv '}.get(record.direction, '') + record.local_source_document
         return result
 
-    def _calc_appt(self, cr, uid, ids, _field, _arg, context=None):
+    def _calc_appt(self, cr, uid, ids, _fields, _arg, context=None):
         res = {}
-        if context and context.get('tz'):
-            tz_name = context['tz']
-        elif uid != SUPERUSER_ID:
-            tz_name = self.pool.get('res.users').read(cr, SUPERUSER_ID, uid, ['name', 'tz'])['tz']
-        else:
+        if not ids:
+            return res
+        ctx = context or {}
+        tz_name = ctx.get('tz', False)
+        user = ctx.get('uid', False)
+        if not tz_name:
             try:
                 tz_name = self.pool.get(
                         'ir.config_parameter'
                         ).read(
-                            cr, 1,
+                            cr, uid,
                             ids=[('key','=','database.time_zone')]
                             )[0]['value']
             except IndexError:
                 _logger.warning('missing system parameter: database.time_zone')
-                tz_name = ''
-        if tz_name:
-            try:
-                tz = pytz.timezone(tz_name)
-            except Exception:
-                _logger.warning("unknown timezone:  %r" % tz_name)
-                tz = UTC
+                tz_name = 'UTC'
+        try:
+            tz = pytz.timezone(tz_name)
+        except Exception:
+            _logger.warning("unknown timezone:  %r" % tz_name)
+            tz = UTC
         if isinstance(ids, (int, long)):
             ids = [ids]
-        data = self.read(cr, uid, ids, fields=['appointment_date', 'appointment_time'], context=context)
+        data = self.read(cr, uid, ids, fields=['appointment_date', 'appointment_time'], context=ctx)
         for datum in data:
-            # date/time are assumed to be in local time
-            try:
-                date = Date.strptime(datum['appointment_date'], DEFAULT_SERVER_DATE_FORMAT)
-            except ValueError:
-                raise ERPError('Invalid Time', 'Unable to parse date from %r' % datum['appointment_date'])
-            try:
-                time = datum['appointment_time'] or '0:00'
-                time = Time.strptime(time, '%H:%M')
-            except ValueError:
-                raise ERPError('Invalid Time', 'Unable to parse time from %r' % datum['appointment_time'])
-            dt = DateTime.combine(date, time, tzinfo=tz)
-            res[datum['id']] = dt
+            if not datum['appointment_date']:
+                dt = False
+                user = False
+            else:
+                # date/time are assumed to be in local time
+                try:
+                    date = Date.strptime(datum['appointment_date'], DEFAULT_SERVER_DATE_FORMAT)
+                except ValueError:
+                    raise ERPError('Invalid Time', 'Unable to parse date from %r' % datum['appointment_date'])
+                try:
+                    time = datum['appointment_time'] or '0:00'
+                    time = Time.strptime(time, '%H:%M')
+                except ValueError:
+                    raise ERPError('Invalid Time', 'Unable to parse time from %r' % datum['appointment_time'])
+                dt = DateTime.combine(date, time, tzinfo=tz)
+            res[datum['id']] = {'appointment': dt, 'appt_scheduled_by_id': user}
         return res
 
     def _calc_duration(self, cr, uid, ids, _field=None, _arg=None, context=None):
@@ -210,10 +215,25 @@ class fnx_sr_shipping(osv.Model):
                     10,
                     ),
                 },
+            multi='calc_appointment',
+            ),
+        'appt_scheduled_by_id': fields.function(
+            _calc_appt,
+            type='many2one',
+            obj='res.users',
+            string='Scheduled by',
+            store={
+                'fnx.sr.shipping': (
+                    lambda s, c, u, ids, ctx={}: ids,
+                    ['appointment_date', 'appointment_time'],
+                    10,
+                    ),
+                },
+            multi='calc_appointment',
+            help="Falcon employee that scheduled appointment.",
             ),
         'duration': fields.function(_calc_duration, type='float', string='Duration (in hours)',
                 store={'fnx.sr.shipping': (lambda s, c, u, ids, ctx={}: ids, ['check_in', 'check_out'], 30)}),
-        'appt_scheduled_by_id': fields.many2one('res.users', 'Scheduled by', help="Falcon employee that scheduled appointment."),
         'appt_confirmed': fields.boolean('Appointment confirmed'),
         'appt_confirmed_on': fields.datetime('Confirmed on', help="When the appointment was confirmed with the carrier"),
         'check_in': fields.datetime('Driver checked in at',),
@@ -269,6 +289,14 @@ class fnx_sr_shipping(osv.Model):
         if values.get('pallets') == 0 and not context.get('fnxsr_pallet_reset'):
             values.pop('pallets')
         return super(fnx_sr_shipping, self).write(cr, uid, ids, values, context=context)
+
+    def onchange_appt_time(self, cr, uid, ids, time, context=None):
+        if isinstance(ids, (int, long)):
+            ids = [ids]
+        time = normalize_time(time)
+        res = {}
+        res['value'] = {'appointment_time': time}
+        return res
 
     def sr_checkin(self, cr, uid, ids, context=None):
         ctx = (context or {}).copy()
@@ -410,4 +438,29 @@ class fnx_sr_shipping(osv.Model):
             else:
                 raise ValueError('unable to process domain: %r' % arg)
         return super(fnx_sr_shipping, self).search(cr, user, args=new_args, offset=offset, limit=limit, order=order, context=context, count=count)
+
+
+def normalize_time(time):
+    'converts time to 24 hh:mm format'
+    if not time or not time.strip():
+        return '0:00'
+    time = time + ' '
+    m = re.search(r'^\s*(\d+)[:. ](\d\d)?\s*(.*)\s*$', time.lower())
+    if not m:
+        raise ERPError('Invalid Time', 'Unable to parse %r [no match]' % time)
+    hour, minute, meridian = m.groups()
+    hour = int(hour)
+    minute = int(minute or 0)
+    meridian = meridian.replace('.', '')
+    if meridian not in ('', 'a', 'am', 'p', 'pm'):
+        raise ERPError('Invalid Time', 'Unable to parse %r [bad meridian]' % time)
+    if meridian.startswith('a') and hour == 12:
+        hour -= 12
+    elif meridian.startswith(('a','p')) and hour > 12:
+        raise ERPError('Invalid Time', 'Unable to parse %r [bad meridian]' % time)
+    elif meridian.startswith('p') and hour < 12:
+        hour += 12
+    if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+        raise ERPError('Invalid Time', '%r is not a valid time [invalid hour or minute]' % time)
+    return '%d:%02d' % (hour, minute)
 
