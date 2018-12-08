@@ -198,6 +198,45 @@ def find_duplicates(remove=False):
 
 
 @Command()
+def fix_appts():
+    "remove appointment if last set by administrator"
+    logger.info('removing appointments set by administrator')
+    print('connecting to %s:%s' % (HOST, DB))
+    connect_oe(HOST, DB, USER, PW)
+    fnx_sr_shipping = OE.conn.get_model('fnx.sr.shipping')
+    updated = 0
+    try:
+        for ticket in ProgressView(
+                message='Checking $total records...',
+                view_type='bar',
+                iterable=get_records(
+                    fnx_sr_shipping,
+                    domain=[('appointment','!=',False),('state','!=','cancelled')],
+                    fields=['id','local_source_document','message_ids','appointment_date','appointment_time'],
+                    )
+            ):
+            for msg in get_records(
+                    OE.conn, 'mail.message',
+                    domain=[('id','in',ticket.message_ids)],
+                    fields=['id','author_id','body'],
+                ):
+                if "<b>Appointment</b>" in msg.body:
+                    if msg.author_id.id == 3:
+                        # most recent appointment set by administrator, remove it
+                        fnx_sr_shipping.write(
+                                ticket.id,
+                                {
+                                    'ship_date': ticket.appointment_date,
+                                    'appointment_date': False,
+                                    'appointment_time': False,
+                                    },
+                                )
+                        updated += 1
+                    break
+    finally:
+        echo('\n%d records updated' % updated)
+
+@Command()
 def fix_carriers():
     """
     compare OE values for carrier with values in files -- if OE value is '99'
