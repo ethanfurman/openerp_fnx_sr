@@ -63,9 +63,9 @@ class fnx_sr_shipping(osv.Model):
             result[record.id] = {'incoming':'PO ', 'outgoing':'Inv '}.get(record.direction, '') + record.local_source_document
         return result
 
-    def _calc_appt(self, cr, uid, ids, _fields, _arg, context=None):
+    def _calc_appt(self, cr, uid, ids, field_names, _arg, context=None):
         res = {}
-        if not ids:
+        if not ids or not field_names:
             return res
         ctx = context or {}
         tz_name = ctx.get('tz', False)
@@ -105,7 +105,12 @@ class fnx_sr_shipping(osv.Model):
                 except ValueError:
                     raise ERPError('Invalid Time', 'Unable to parse time from %r' % datum['appointment_time'])
                 dt = DateTime.combine(date, time, tzinfo=tz)
-            res[datum['id']] = {'appointment': dt, 'appt_scheduled_by_id': user}
+            if 'appointment' in field_names:
+                res[datum['id']] = {'appointment': dt}
+                if 'appt_scheduled_by_id' in field_names :
+                    res[datum['id']]['appt_scheduled_by_id'] = user
+            elif 'appt_scheduled_by_id' in field_names:
+                res[datum['id']] = {'appt_scheduled_by_id': False}
         return res
 
     def _calc_duration(self, cr, uid, ids, _field=None, _arg=None, context=None):
@@ -226,7 +231,7 @@ class fnx_sr_shipping(osv.Model):
                 'fnx.sr.shipping': (
                     lambda s, c, u, ids, ctx={}: ids,
                     ['appointment_date', 'appointment_time'],
-                    10,
+                    20,
                     ),
                 },
             multi='calc_appointment',
