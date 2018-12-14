@@ -84,7 +84,7 @@
                                 @appointment_date .oe_edit_only
                                 @appointment_time .oe_edit_only on_change='onchange_appt_time(appointment_time)'
                                 @appointment .oe_view_only
-                                @appt_scheduled_by_id writeonly="groups('fnx_sr.group_fnx_sr_manager')"
+                                @appt_scheduled_by_id readonly='1'
                                 ~separator colspan='2'
                                 @check_in writeonly="groups('fnx_sr.group_fnx_sr_manager')"
                                 @check_out writeonly="groups('fnx_sr.group_fnx_sr_manager')"
