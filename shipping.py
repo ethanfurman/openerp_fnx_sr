@@ -237,7 +237,7 @@ class fnx_sr_shipping(osv.Model):
             multi='calc_appointment',
             help="Falcon employee that scheduled appointment.",
             ),
-        'duration': fields.function(_calc_duration, type='float', string='Duration (in hours)',
+        'duration': fields.function(_calc_duration, type='float', digits=(16,2), string='Duration (in hours)',
                 store={'fnx.sr.shipping': (lambda s, c, u, ids, ctx={}: ids, ['check_in', 'check_out'], 30)}),
         'appt_confirmed': fields.boolean('Appointment confirmed'),
         'appt_confirmed_on': fields.datetime('Confirmed on', help="When the appointment was confirmed with the carrier"),
