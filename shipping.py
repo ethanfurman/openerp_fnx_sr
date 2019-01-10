@@ -69,7 +69,6 @@ class fnx_sr_shipping(osv.Model):
             return res
         ctx = context or {}
         tz_name = ctx.get('tz', False)
-        user = ctx.get('uid', False)
         if not tz_name:
             try:
                 tz_name = self.pool.get(
@@ -92,7 +91,6 @@ class fnx_sr_shipping(osv.Model):
         for datum in data:
             if not datum['appointment_date']:
                 dt = False
-                user = False
             else:
                 # date/time are assumed to be in local time
                 try:
@@ -107,10 +105,6 @@ class fnx_sr_shipping(osv.Model):
                 dt = DateTime.combine(date, time, tzinfo=tz)
             if 'appointment' in field_names:
                 res[datum['id']] = {'appointment': dt}
-                if 'appt_scheduled_by_id' in field_names :
-                    res[datum['id']]['appt_scheduled_by_id'] = user
-            elif 'appt_scheduled_by_id' in field_names:
-                res[datum['id']] = {'appt_scheduled_by_id': False}
         return res
 
     def _calc_duration(self, cr, uid, ids, _field=None, _arg=None, context=None):
@@ -222,21 +216,7 @@ class fnx_sr_shipping(osv.Model):
                 },
             multi='calc_appointment',
             ),
-        'appt_scheduled_by_id': fields.function(
-            _calc_appt,
-            type='many2one',
-            obj='res.users',
-            string='Scheduled by',
-            store={
-                'fnx.sr.shipping': (
-                    lambda s, c, u, ids, ctx={}: ids,
-                    ['appointment_date', 'appointment_time'],
-                    20,
-                    ),
-                },
-            multi='calc_appointment',
-            help="Falcon employee that scheduled appointment.",
-            ),
+        'appt_scheduled_by_id': fields.many2one('res.users', string='Scheduled by', help="Falcon employee that scheduled appointment."),
         'duration': fields.function(_calc_duration, type='float', digits=(16,2), string='Duration (in hours)',
                 store={'fnx.sr.shipping': (lambda s, c, u, ids, ctx={}: ids, ['check_in', 'check_out'], 30)}),
         'appt_confirmed': fields.boolean('Appointment confirmed'),
@@ -255,6 +235,8 @@ class fnx_sr_shipping(osv.Model):
 
 
     def create(self, cr, uid, values, context=None):
+        if 'appointment_date' in values or 'appointment_time' in values:
+            values['appt_scheduled_by_id'] = uid
         res_partner = self.pool.get('res.partner')
         res_users = self.pool.get('res.users')
         if 'carrier_id' not in values or not values['carrier_id']:
@@ -276,6 +258,8 @@ class fnx_sr_shipping(osv.Model):
 
     def write(self, cr, uid, ids, values, context=None):
         context = (context or {}).copy()
+        if 'appointment_date' in values or 'appointment_time' in values:
+            values['appt_scheduled_by_id'] = uid
         if 'tz' not in context:
             context['tz'] = 'UTC'
         if isinstance(ids, (int, long)):
