@@ -85,7 +85,7 @@ def main(host, db, user, pw):
 @Command(
         order=('specific order to check', OPTION),
         )
-def order_check(order='*'):
+def order_check(order):
     orders = defaultdict(list)
     if order != '*':
         order += '_*'
@@ -297,7 +297,7 @@ def info():
     for order in all_orders:
         pb.tick()
         appt = order.ship_date and order.ship_date[:7] or False
-        if opar.get_subset((partners[order.partner_id[0]], order.local_source_document)):
+        if order.partner_id and opar.get_subset((partners[order.partner_id[0]], order.local_source_document)):
             month[appt]['opar'] += 1
             totals['opar'] += 1
         month[appt]['total'] += 1
