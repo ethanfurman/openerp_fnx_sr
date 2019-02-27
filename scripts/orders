@@ -1246,10 +1246,11 @@ def update_order(values):
             extra.wanted_date = fix_date(fis_record[F36.date_wanted], format='ymd')
             extra.ship_date = fix_date(fis_record[F36.ship_date], format='ymd')
         else:
-            error(
-                    'unable to find invoice %r\ndetails: %r'
-                    % (values.local_source_document, original_values)
-                    )
+            if len(values) <= 3:
+                error(
+                        'unable to find invoice %r\ndetails: %r'
+                        % (values.local_source_document, original_values)
+                        )
     elif direction == 'incoming':
         # purchase order
         found = fis_purchases.get_subset(values.local_source_document)
@@ -1265,10 +1266,11 @@ def update_order(values):
             extra.wanted_date = fix_date(fis_record[F219.date_wanted].replace('/',''), 'mdy')
             extra.ship_date = fix_date(fis_record[F219.eta_date], 'ymd')
         else:
-            error(
-                    'unable to find purchase order %r\ndetails: %r'
-                    % (values.local_source_document, original_values)
-                    )
+            if len(values) <= 3:
+                error(
+                        'unable to find purchase order %r\ndetails: %r'
+                        % (values.local_source_document, original_values)
+                        )
     else:
         raise Exception('failed to calculate direction for %r' % (original_values, ))
     #
