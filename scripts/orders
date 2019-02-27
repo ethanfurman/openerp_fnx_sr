@@ -10,7 +10,7 @@ from pandaemonium import PidLockFile, AlreadyLocked
 from scandir import scandir
 from scription import *
 from VSS.BBxXlate.fisData import fisData
-from VSS.utils import grouped, fix_date, date
+from VSS.utils import fix_date, date
 from antipathy import Path
 from VSS.time_machine import PropertyDict
 from VSS.utils import ProgressBar
@@ -826,7 +826,7 @@ def sync_openerp(orders):
 
 def sync_fis(show_missing, reopen, orders):
     """
-    updates status to complete/cancelled, ship date to FIS
+    updates status to complete/cancelled, ship date to FIS, BoL to FIS
     """
     print('connecting to OpenERP')
     connect_oe(HOST, DB, USER, PW)
@@ -954,14 +954,17 @@ def sync_fis(show_missing, reopen, orders):
                 else:
                     reopened[order.id] = order.local_source_document
     if cancelled:
-        for ids in ProgressView(iterable=cancelled.keys(), message='cancelling $total orders', view_type='bar'):
-            OE.fnx_shipping.write(ids, {'state': 'cancelled'})  #, context={'message_track': False})
+        OE.fnx_shipping.write(cancelled.keys(), {'state': 'cancelled'})  #, context={'message_track': False})
+        # for ids in ProgressView(iterable=cancelled.keys(), message='cancelling $total orders', view_type='bar'):
+        #     OE.fnx_shipping.write(ids, {'state': 'cancelled'})  #, context={'message_track': False})
     if completed:
-        for ids in grouped(ProgressView(iterable=completed.keys(), message='updating state for $total orders', view_type='bar'), 100):
-            OE.fnx_shipping.write(ids, {'state': 'complete'})  #, context={'message_track': False})
+        OE.fnx_shipping.write(completed.keys(), {'state': 'complete'})  #, context={'message_track': False})
+        # for ids in grouped(ProgressView(iterable=completed.keys(), message='updating state for $total orders', view_type='bar'), 100):
+        #     OE.fnx_shipping.write(ids, {'state': 'complete'})  #, context={'message_track': False})
     if reopened:
-        for ids in ProgressView(iterable=reopened.keys(), message='reopening $total orders', view_type='bar'):
-            OE.fnx_shipping.write(ids, {'check_in': False, 'check_out': False}, context={'reopen': True})
+        OE.fnx_shipping.write(reopened.keys(), {'check_in': False, 'check_out': False}, context={'reopen': True})
+        # for ids in ProgressView(iterable=reopened.keys(), message='reopening $total orders', view_type='bar'):
+        #     OE.fnx_shipping.write(ids, {'check_in': False, 'check_out': False}, context={'reopen': True})
     # dates
     changed_shipping = 0
     still_open_invoices = OE.fnx_shipping.search_read(
@@ -1060,9 +1063,36 @@ def sync_fis(show_missing, reopen, orders):
                 missing_purchases.append(order_no)
         missing_invoices.sort()
         missing_purchases.sort()
+    #update BoL data
+    order_nos = [
+            fo[F36.order_no]
+            for fo in fis_orders.values()
+            ]
+    invoices = dict([
+        (r.local_source_document, r)
+        for r in get_records(
+            OE.fnx_shipping,
+            domain=[('local_source_document','in',order_nos)],
+            fields=['id','carrier_bill_of_lading','local_source_document'],
+            )])
+    bol_update = 0
+    for order in fis_orders.values():
+        order_no = order[F36.order_no]
+        try:
+            oe_rec = invoices[order_no]
+        except KeyError:
+            error('unable to find', order_no)
+            continue
+        id = oe_rec.id
+        bol = oe_rec.carrier_bill_of_lading
+        if bol != order[F36.bol_no]:
+            OE.fnx_shipping.write(id, {'carrier_bill_of_lading': order[F36.bol_no]})
+            bol_update += 1
+
     print('completed %d orders' % len(completed))
     print('cancelled %d orders' % len(cancelled))
     print('dates synced with FIS:', changed_shipping)
+    print('BoL updates: %d' % bol_update)
     if reopen:
         print('reopened %d orders' % len(reopened))
     if show_missing:

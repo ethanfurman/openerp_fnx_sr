@@ -13,18 +13,21 @@
                         @fnxsr_shipped attrs="{'invisible': [('customer','=',False),('supplier','=',False)]}" domain="[('fnxsr_shipped.state','=','draft')]" nolabel='1'
                             ~tree
                                 @name
+                                @carrier_bill_of_lading
                                 @appointment
                                 @partner_source_document
                                 @state
                         @fnxsr_carried attrs="{'invisible': [('is_carrier','=',False)]}" nolabel='1'
                             ~tree
                                 @name
+                                @carrier_bill_of_lading
                                 @appointment
                                 @partner_source_document
                                 @state
                         @fnxsr_orders attrs="{'invisible': ['|','|',('is_carrier','=',True),('customer','=',True),('supplier','=',True)]}" nolabel='1'
                             ~tree
                                 @name
+                                @carrier_bill_of_lading
                                 @appointment
                                 @partner_source_document
                                 @state
