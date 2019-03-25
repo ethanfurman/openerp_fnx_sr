@@ -297,11 +297,13 @@ def info():
     for order in all_orders:
         pb.tick()
         appt = order.ship_date and order.ship_date[:7] or False
-        if order.partner_id and opar.get_subset((partners[order.partner_id[0]], order.local_source_document)):
+        if order.partner_id and order.partner_id.id in partners and opar.get_subset((partners[order.partner_id[0]], order.local_source_document)):
             month[appt]['opar'] += 1
             totals['opar'] += 1
         month[appt]['total'] += 1
-        month[appt][order.direction] += 1
+        if order.direction:
+            month[appt][order.direction] += 1
+            totals[order.direction] += 1
         if order.direction == 'outgoing':
             month[appt][order.state or 'unknown'] += 1
             totals[order.state or 'unknown'] += 1
@@ -684,7 +686,6 @@ def update(file, directory=SOURCE):
                 dest = ERRORS
                 failures = True
             except (Exception, ), exc:
-                raise
                 error('%s: %s' % (file, exc.message or exc.args))
                 # failing.append('%s: %s' % (file, exc.message or exc.args))
                 dest = None
@@ -955,16 +956,10 @@ def sync_fis(show_missing, reopen, orders):
                     reopened[order.id] = order.local_source_document
     if cancelled:
         OE.fnx_shipping.write(cancelled.keys(), {'state': 'cancelled'})  #, context={'message_track': False})
-        # for ids in ProgressView(iterable=cancelled.keys(), message='cancelling $total orders', view_type='bar'):
-        #     OE.fnx_shipping.write(ids, {'state': 'cancelled'})  #, context={'message_track': False})
     if completed:
         OE.fnx_shipping.write(completed.keys(), {'state': 'complete'})  #, context={'message_track': False})
-        # for ids in grouped(ProgressView(iterable=completed.keys(), message='updating state for $total orders', view_type='bar'), 100):
-        #     OE.fnx_shipping.write(ids, {'state': 'complete'})  #, context={'message_track': False})
     if reopened:
         OE.fnx_shipping.write(reopened.keys(), {'check_in': False, 'check_out': False}, context={'reopen': True})
-        # for ids in ProgressView(iterable=reopened.keys(), message='reopening $total orders', view_type='bar'):
-        #     OE.fnx_shipping.write(ids, {'check_in': False, 'check_out': False}, context={'reopen': True})
     # dates
     changed_shipping = 0
     still_open_invoices = OE.fnx_shipping.search_read(
@@ -1081,7 +1076,8 @@ def sync_fis(show_missing, reopen, orders):
         try:
             oe_rec = invoices[order_no]
         except KeyError:
-            error('unable to find', order_no)
+            if not order_no.startswith('C'):
+                error('unable to find', order_no)
             continue
         id = oe_rec.id
         bol = oe_rec.carrier_bill_of_lading
@@ -1109,6 +1105,24 @@ def update_order(values):
     # local_source_document is our purchase order / invoice number
     # local_contact is the falcon user
     #
+    # look for existing shipping record
+    context = {'active_test': False}
+    orders = OE.fnx_shipping.search_read(
+            fields=['id','partner_number','ship_to_code','order_date','wanted_date','ship_date'],
+            domain=[('local_source_document','=',values.local_source_document)],
+            context=context,
+            )
+    if len(orders) > 1:
+        raise ValueError(
+                'found more than one shipping record matching %r: %r'
+                % (values.local_source_document, [r.id for r in orders])
+                )
+    elif len(orders) == 1:
+        oe_record = orders[0]
+    else:
+        oe_record = None
+    print('  shipping record:', oe_record, verbose=2)
+    #
     # appointment_date -> 20140107
     #
     # FIXME: appointment_date is actually an estimated ship date -- manually changing that
@@ -1129,7 +1143,6 @@ def update_order(values):
     print('------', verbose=2)
     print('processsing shipping record for:  %7s...' % (values.local_source_document,), end=' ')
     print('\n%s' % values, verbose=3)
-    context = {'active_test': False}
     original_values = values.copy()
     #
     # check for local document
@@ -1202,24 +1215,6 @@ def update_order(values):
     elif direction == 'outgoing':
         values.job_title = values.preposition = values.partner_source_document_type = 'sales'
     #
-    # look for existing shipping record
-    #
-    orders = OE.fnx_shipping.search_read(
-            fields=['id','partner_number','ship_to_code','order_date','wanted_date','ship_date'],
-            domain=[('local_source_document','=',values.local_source_document)],
-            context=context,
-            )
-    if len(orders) > 1:
-        raise ValueError(
-                'found more than one shipping record matching %r: %r'
-                % (values.local_source_document, [r.id for r in orders])
-                )
-    elif len(orders) == 1:
-        oe_record = orders[0]
-    else:
-        oe_record = None
-    print('  shipping record:', oe_record, verbose=2)
-    #
     # check for sales rep
     #
     login = values.pop('user', None)
@@ -1246,9 +1241,9 @@ def update_order(values):
             extra.wanted_date = fix_date(fis_record[F36.date_wanted], format='ymd')
             extra.ship_date = fix_date(fis_record[F36.ship_date], format='ymd')
         else:
-            if len(values) <= 3:
-                error(
-                        'unable to find invoice %r\ndetails: %r'
+            if oe_record is None and values.get('state') not in ('complete','cancelled'):
+                echo(
+                        'unable to find invoice %r in FIS\ndetails: %r'
                         % (values.local_source_document, original_values)
                         )
     elif direction == 'incoming':
@@ -1266,9 +1261,9 @@ def update_order(values):
             extra.wanted_date = fix_date(fis_record[F219.date_wanted].replace('/',''), 'mdy')
             extra.ship_date = fix_date(fis_record[F219.eta_date], 'ymd')
         else:
-            if len(values) <= 3:
-                error(
-                        'unable to find purchase order %r\ndetails: %r'
+            if oe_record is None and values.get('state') not in ('complete','cancelled'):
+                echo(
+                        'unable to find purchase order %r in FIS\ndetails: %r'
                         % (values.local_source_document, original_values)
                         )
     else:
