@@ -97,6 +97,7 @@
                                 ~separator colspan='2'
                                 //@appt_confirmed_on writeonly="groups('fnx_sr.group_fnx_sr_manager')"
                                 @container
+                                @carrier_bill_of_lading attrs="{'readonly':True}"
                         ~group
                             ~group $Order_Comments
                                 @comment nolabel='1'
