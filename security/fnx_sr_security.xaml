@@ -1,7 +1,7 @@
 !!! xml1.0
 ~openerp
 
-    ~data noupdate='0'
+    ~data noupdate='1'
 
         ~record model='ir.module.category' #module_fnx_sr
             @name: FnxSR
@@ -11,18 +11,18 @@
         ~record model='res.groups' #group_fnx_sr_guest
             @name: Guest
             @category_id ref='module_fnx_sr'
-            @comment: The user has read-only acess.
+            @comment: The user has acess to embedded S&R views.
 
         ~record model='res.groups' #group_fnx_sr_user
             @name: User
             @category_id ref='module_fnx_sr'
-            @comment: The user has normal access.
+            @comment: The user has read/write access.
             @implied_ids eval="[(4, ref('group_fnx_sr_guest'))]"
 
         ~record model='res.groups' #group_fnx_sr_manager
             @name: Manager
             @category_id ref='module_fnx_sr'
-            @comment: The user has manager access.
+            @comment: The user has all access.
             @implied_ids eval="[(4, ref('group_fnx_sr_user'))]"
             @users eval="[(4, ref('base.user_root'))]"
 
