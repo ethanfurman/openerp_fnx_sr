@@ -2,7 +2,7 @@
 ~openerp
     ~data
 
-        ~menuitem @FnxSR #menu_fnx_sr_root groups='group_fnx_sr_manager,group_fnx_sr_user,group_fnx_sr_guest'
+        ~menuitem @FnxSR #menu_fnx_sr_root groups='group_fnx_sr_user'
 
         ~record model='ir.ui.view' #fnx_sr_calendar
             @name: fnx.sr.calendar
