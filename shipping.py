@@ -7,6 +7,8 @@ from openerp import SUPERUSER_ID
 from openerp.osv import fields, osv
 from openerp.exceptions import ERPError
 from openerp.tools import DEFAULT_SERVER_DATE_FORMAT, DEFAULT_SERVER_DATETIME_FORMAT
+from openerp.tools.misc import OrderBy
+from textwrap import dedent
 import pytz
 from VSS.utils import float, hrtd
 import logging
@@ -30,7 +32,17 @@ class fnx_sr_shipping(osv.Model):
     _inherit = ['mail.thread']
     _inherits = {}
     _mirrors = {'partner_id': ['warehouse_comment']}
-    _order = 'appointment_date desc, appointment_time asc, state desc'
+    # _order = 'appointment_date desc, appointment_time asc, state desc'
+    _order = OrderBy(dedent("""\
+            CASE WHEN state = 'draft' THEN 1 END,
+            CASE WHEN state = 'ready' THEN 2 END,
+            CASE WHEN state = 'loading' THEN 3 END,
+            CASE WHEN state = 'transit' THEN 4 END,
+            CASE WHEN state = 'partial' THEN 5 END,
+            CASE WHEN state = 'complete' THEN 6 END,
+            CASE WHEN state = 'cancelled' THEN 7 END,
+            COALESCE(appointment_date, ship_date) DESC
+            """))
     _rec_name = 'name'
     _mail_flat_thread = False
 
