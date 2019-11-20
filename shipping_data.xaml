@@ -1,7 +1,7 @@
 !!!xml1.0
 
 ~openerp
-    ~data noupdate='0'
+    ~data noupdate='1'
 
         // mail message subtypes
 
