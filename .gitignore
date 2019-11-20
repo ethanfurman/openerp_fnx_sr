@@ -1,0 +1,8 @@
+*.pyc
+.*.sw?
+*~
+.*~
+*.xml
+*.xsl
+.hg/
+.hgignore
