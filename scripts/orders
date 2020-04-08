@@ -670,7 +670,7 @@ def update(file, directory=SOURCE):
                 order = get_order(file)
                 logger.info(
                         '%s: %s',
-                        file,
+                        file.name,
                         ', '.join('%s=%r' % (k, v) for k, v in sorted(order.items()))
                         )
                 if order.local_source_document[0].isalpha():
