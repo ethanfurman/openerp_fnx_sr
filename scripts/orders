@@ -668,6 +668,11 @@ def update(file, directory=SOURCE):
         for file in files:
             try:
                 order = get_order(file)
+                logger.info(
+                        '%s: %r',
+                        order.get(order, 'unknown'),
+                        ', '.join('%s=%r' % (k, v) for k, v in sorted(order.items()))
+                        )
                 if order.local_source_document[0].isalpha():
                     dest = ERRORS
                 else:
@@ -775,11 +780,6 @@ def construct_datetime(appt_date, appt_time):
     return dt
 
 def get_order(order):
-    logger.info(
-            '%s: %r',
-            order.get(order, 'unknown'),
-            ', '.join('%s=%r' % (k, v) for k, v in sorted(order.items()))
-            )
     g = {}
     try:
         execfile(order, g)
