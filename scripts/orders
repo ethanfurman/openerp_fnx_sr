@@ -970,7 +970,7 @@ def sync_fis(show_missing, reopen, orders):
     still_open_invoices = OE.fnx_shipping.search_read(
             fields=[
                 'id', 'ship_date', 'local_source_document', 'state', 'partner_number',
-                'ship_to_code', 'order_date', 'wanted_date', 'ship_date',
+                'ship_to_code', 'order_date', 'wanted_date',
                 ],
             domain=oi_dmn,
             )
