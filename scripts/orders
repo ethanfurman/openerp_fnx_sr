@@ -27,12 +27,12 @@ import xmlrpclib
 virtualenv = os.environ['VIRTUAL_ENV']
 logger = getLogger()
 logger.setLevel(INFO)
-_handler = handlers.RotatingFileHandler(
+_handler = handlers.TimedRotatingFileHandler(
         '%s/var/log/fnx_sr.log' % virtualenv,
-        maxBytes=1024*1024,
+        when='midnight',
         backupCount=30,
         )
-_formatter = Formatter('%(process)06d %(asctime)s %(name)-25s %(message)s')
+_formatter = Formatter('%(asctime)s %(funcName)-25s %(message)s')
 _handler.setFormatter(_formatter)
 logger.addHandler(_handler)
 del _handler, _formatter
@@ -775,6 +775,11 @@ def construct_datetime(appt_date, appt_time):
     return dt
 
 def get_order(order):
+    logger.info(
+            '%s: %r',
+            order.get(order, 'unknown'),
+            ', '.join('%s=%r' % (k, v) for k, v in sorted(order.items()))
+            )
     g = {}
     try:
         execfile(order, g)
