@@ -1248,9 +1248,10 @@ def update_order(values):
         else:
             if oe_record is None and values.get('state') not in ('complete','cancelled'):
                 echo(
-                        'unable to find invoice %r in FIS\ndetails: %r'
-                        % (values.local_source_document, original_values)
+                        'unable to find invoice %r in FIS'
+                        % (values.local_source_document, )
                         )
+                print('   details: %r' % (original_values, ), verbose=2)
     elif direction == 'incoming':
         # purchase order
         found = fis_purchases.get_subset(values.local_source_document)
@@ -1268,9 +1269,10 @@ def update_order(values):
         else:
             if oe_record is None and values.get('state') not in ('complete','cancelled'):
                 echo(
-                        'unable to find purchase order %r in FIS\ndetails: %r'
+                        'unable to find purchase order %r in FIS'
                         % (values.local_source_document, original_values)
                         )
+                print('   details: %r' % (original_values, ), verbose=2)
     else:
         raise Exception('failed to calculate direction for %r' % (original_values, ))
     #
