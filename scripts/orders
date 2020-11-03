@@ -206,7 +206,7 @@ def fix_appts():
     fnx_sr_shipping = OE.conn.get_model('fnx.sr.shipping')
     updated = 0
     try:
-        for ticket in ProgressView(
+        for ticket in ViewProgress(
                 message='Checking $total records...',
                 view_type='bar',
                 iterable=get_records(
@@ -804,15 +804,15 @@ def sync_openerp(orders):
             domain=domain,
             )
     pool = defaultdict(list)
-    for t in ProgressView(
-            iterable=targets,
-            message='sorting $total records',
+    for t in ViewProgress(
+            targets,
+            'sorting $total records',
             view_type='bar',
         ):
         pool[t.appointment_date, t.appointment_time].append(t.id)
-    for date_time, ids in ProgressView(
-            iterable=pool.items(),
-            message='updating $total groups',
+    for date_time, ids in ViewProgress(
+            pool.items(),
+            'updating $total groups',
             view_type='bar',
         ):
         date, time = date_time
@@ -874,9 +874,9 @@ def sync_fis(show_missing, reopen, orders):
     missing_purchases = []
     erp_documents = set()
     # order status
-    for order in ProgressView(
-            iterable=open_invoices,
-            message='sorting $total invoices',
+    for order in ViewProgress(
+            open_invoices,
+            'sorting $total invoices',
             view_type='bar',
         ):
         erp_documents.add(order.local_source_document)
@@ -896,9 +896,9 @@ def sync_fis(show_missing, reopen, orders):
         else:
             logger.debug('%6s: status -> %r [completing]', order.local_source_document, status)
             completed[order.id] = order.local_source_document
-    for order in ProgressView(
-            iterable=open_purchases,
-            message='sorting $total purchase orders',
+    for order in ViewProgress(
+            open_purchases,
+            'sorting $total purchase orders',
             view_type='bar',
         ):
         erp_documents.add(order.local_source_document)
@@ -929,9 +929,9 @@ def sync_fis(show_missing, reopen, orders):
                     )
             completed[order.id] = order.local_source_document
     if reopen:
-        for order in ProgressView(
-                iterable=closed_invoices,
-                message='checking $total completed orders',
+        for order in ViewProgress(
+                closed_invoices,
+                'checking $total completed orders',
                 view_type='bar',
             ):
             erp_documents.add(order.local_source_document)
@@ -945,9 +945,9 @@ def sync_fis(show_missing, reopen, orders):
                     break
                 else:
                     reopened[order.id] = order.local_source_document
-        for order in ProgressView(
-                iterable=closed_purchases,
-                message='checking $total completed purchase orders',
+        for order in ViewProgress(
+                closed_purchases,
+                'checking $total completed purchase orders',
                 view_type='bar',
             ):
             erp_documents.add(order.local_source_document)
@@ -975,9 +975,9 @@ def sync_fis(show_missing, reopen, orders):
                 ],
             domain=oi_dmn,
             )
-    for order in ProgressView(
-            iterable=still_open_invoices,
-            message='checking $total invoices for changed dates',
+    for order in ViewProgress(
+            still_open_invoices,
+            'checking $total invoices for changed dates',
             view_type='bar',
         ):
         found = fis_orders.get_subset(order.local_source_document)
@@ -1008,9 +1008,9 @@ def sync_fis(show_missing, reopen, orders):
             fields=['id', 'ship_date', 'local_source_document', 'state'],
             domain=op_dmn,
             )
-    for order in ProgressView(
-            iterable=still_open_purchases,
-            message='checking $total purchases for changed dates',
+    for order in ViewProgress(
+            still_open_purchases,
+            'checking $total purchases for changed dates',
             view_type='bar',
         ):
         found = fis_purchases.get_subset(order.local_source_document)
@@ -1042,9 +1042,9 @@ def sync_fis(show_missing, reopen, orders):
                         )
     # missing orders
     if show_missing:
-        for record in ProgressView(
-                iterable=fis_orders,
-                message='searching for missing invoices',
+        for record in ViewProgress(
+                fis_orders,
+                'searching for missing invoices',
                 view_type='bar',
             ):
             order_no = record[F36.order_no]
@@ -1052,9 +1052,9 @@ def sync_fis(show_missing, reopen, orders):
                 continue
             elif order_no and order_no not in erp_documents:
                 missing_invoices.append(order_no)
-        for record in ProgressView(
-                iterable=fis_purchases,
-                message='searching for missing purchase orders',
+        for record in ViewProgress(
+                fis_purchases,
+                'searching for missing purchase orders',
                 view_type='bar',
             ):
             order_no = record[F219.po_no]
