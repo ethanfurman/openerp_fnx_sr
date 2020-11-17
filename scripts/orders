@@ -691,7 +691,7 @@ def update(file, directory=SOURCE):
                 dest = ERRORS
                 failures = True
             except (Exception, ), exc:
-                logger.execption()
+                logger.exception()
                 error('%s: %s' % (file, exc.message or exc.args))
                 # failing.append('%s: %s' % (file, exc.message or exc.args))
                 dest = None
