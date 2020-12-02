@@ -15,7 +15,7 @@ from antipathy import Path
 from VSS.time_machine import PropertyDict
 from VSS.utils import ProgressBar
 from logging import INFO, getLogger, Formatter, handlers
-from openerplib import get_connection, get_records, Many2One, DEFAULT_SERVER_DATE_FORMAT
+from openerplib import get_connection, get_records, AttrDict, Many2One, DEFAULT_SERVER_DATE_FORMAT
 from openerplib.dates import LOCAL_TIME
 from updates.fis_schema import F36, F219
 import os
@@ -604,8 +604,9 @@ def sync(what, show_missing, reopen, *orders):
 @Command(
         file=('order to add/update in system', OPTION, 'f', Path),
         directory=('directory of orders to add/update in system', OPTION, 'd', Path),
+        abort=('abort on error', FLAG, 'a'),
         )
-def update(file, directory=SOURCE):
+def update(file, directory=SOURCE, abort=False):
     """
     Add files with the structure of
 
@@ -679,10 +680,15 @@ def update(file, directory=SOURCE):
                     update_order(order)
                     dest = ARCHIVE
             except MissingPartner as exc:
+                if abort:
+                    raise
+                echo()
                 echo('%s: %s (skipping)' % (file.filename, exc.message or exc.args), border='lined')
                 dest = None
             except (BadFormat, CancelledOrder, MissingFIS) as exc:
-                error('%s: %s' % (file, exc.message or exc.args))
+                if abort:
+                    raise
+                error('%s: %s %s' % (file, exc.__class__.__name__, exc.message or exc.args))
                 with open(file) as f:
                     data = '================\n%s\n----------------\n' % file
                     data += f.read() + '\n'
@@ -691,8 +697,10 @@ def update(file, directory=SOURCE):
                 dest = ERRORS
                 failures = True
             except (Exception, ), exc:
-                logger.exception()
-                error('%s: %s' % (file, exc.message or exc.args))
+                if abort:
+                    raise
+                logger.exception('error processing %s', file)
+                error('%s: %s %s' % (file, exc.__class__.__name__, exc.message or exc.args))
                 # failing.append('%s: %s' % (file, exc.message or exc.args))
                 dest = None
                 failures = True
@@ -788,7 +796,7 @@ def get_order(order):
         raise BadFormat(str(exc))
     if 'order' not in g:
         raise BadFormat('empty file?')
-    return PropertyDict(g['order'])
+    return AttrDict(g['order'])
 
 def sync_openerp(orders):
     connect_oe(HOST, DB, USER, PW)
@@ -1135,7 +1143,7 @@ def update_order(values):
     # field until the update file is corrected
 
     if 'appointment_date' in values:
-        values.ship_date = values.pop('appointment_date')
+        values.ship_date = fix_date(values.pop('appointment_date', 'mdy')
     #
     # carrier_xmlid --> 99
     # cartons --> 9
@@ -1296,23 +1304,25 @@ def update_order(values):
             error(exc)
             raise
     else:
-        # add changed info from FIS
-        for setting, new_value in extra.items():
-            if oe_record[setting] != new_value:
-                values[setting] = new_value
+        # add all extra info from FIS
+        values.update(extra)
+        # and remove unchanged items
+        for setting, value in list(values.items()):
+            if setting in oe_record and oe_record[setting] == value:
+                values.pop(setting)
         try:
             print('  updating:', values.items(), verbose=2)
             OE.fnx_shipping.write([oe_record['id']], pfm(values))
             print('  updated')
         except xmlrpclib.ProtocolError, exc:
-            print('  failed')
+            print('  failed: ', exc)
             raise BadFormat('Order %s: %s' % (values.local_source_document, (exc)))
         except xmlrpclib.Fault, exc:
             if 'This shipping record has been cancelled.' in str(exc):
                 print('  shipping record has been cancelled')
                 raise CancelledOrder('Order has been cancelled [id: %s]' % (oe_record['id'],))
             else:
-                print('  failed')
+                print('  failed: ', exc)
                 raise
         except Exception, exc:
             print('  failed')
