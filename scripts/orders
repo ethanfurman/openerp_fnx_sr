@@ -604,9 +604,9 @@ def sync(what, show_missing, reopen, *orders):
 @Command(
         file=('order to add/update in system', OPTION, 'f', Path),
         directory=('directory of orders to add/update in system', OPTION, 'd', Path),
-        abort=('abort on error', FLAG, 'a'),
+        abort_on_error=Spec('abort on error', FLAG, 'a', usage='abort'),
         )
-def update(file, directory=SOURCE, abort=False):
+def update(file, directory=SOURCE, abort_on_error=False):
     """
     Add files with the structure of
 
@@ -680,13 +680,13 @@ def update(file, directory=SOURCE, abort=False):
                     update_order(order)
                     dest = ARCHIVE
             except MissingPartner as exc:
-                if abort:
+                if abort_on_error:
                     raise
                 echo()
                 echo('%s: %s (skipping)' % (file.filename, exc.message or exc.args), border='lined')
                 dest = None
             except (BadFormat, CancelledOrder, MissingFIS) as exc:
-                if abort:
+                if abort_on_error:
                     raise
                 error('%s: %s %s' % (file, exc.__class__.__name__, exc.message or exc.args))
                 with open(file) as f:
@@ -697,7 +697,7 @@ def update(file, directory=SOURCE, abort=False):
                 dest = ERRORS
                 failures = True
             except (Exception, ), exc:
-                if abort:
+                if abort_on_error:
                     raise
                 logger.exception('error processing %s', file)
                 error('%s: %s %s' % (file, exc.__class__.__name__, exc.message or exc.args))
@@ -1143,7 +1143,7 @@ def update_order(values):
     # field until the update file is corrected
 
     if 'appointment_date' in values:
-        values.ship_date = fix_date(values.pop('appointment_date', 'mdy')
+        values.ship_date = fix_date(values.pop('appointment_date', 'mdy'))
     #
     # carrier_xmlid --> 99
     # cartons --> 9
