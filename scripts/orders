@@ -61,10 +61,10 @@ draft = scheduled = appt = ready = checked_in = complete = cancelled = None
 
 # API
 @Script(
-        host=('host where OpenERP instance is running', OPTION),
-        db=('database to use', OPTION),
-        user=('login name to use', OPTION),
-        pw=('password for login name', OPTION),
+        host=('host where OpenERP instance is running', OPTION, None),
+        db=('database to use', OPTION, None),
+        user=('login name to use', OPTION, None),
+        pw=('password for login name', OPTION, None),
         )
 def main(host, db, user, pw):
     if host:
