@@ -1196,7 +1196,7 @@ def update_order(values):
     # check carrier
     #
     carrier_xmlid = values.pop('carrier_xmlid', None)
-    if carrier_xmlid not in (None, ):
+    if carrier_xmlid not in (None, '99'):
         carrier_id = oe_carriers.get(carrier_xmlid)
         if carrier_id is None:
             raise MissingPartner('unable to find carrier %r in OpenERP' % carrier_xmlid)

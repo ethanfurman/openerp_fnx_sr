@@ -250,10 +250,7 @@ class fnx_sr_shipping(osv.Model):
     def create(self, cr, uid, values, context=None):
         if 'appointment_date' in values or 'appointment_time' in values:
             values['appt_scheduled_by_id'] = uid
-        res_partner = self.pool.get('res.partner')
         res_users = self.pool.get('res.users')
-        if 'carrier_id' not in values or not values['carrier_id']:
-            values['carrier_id'] = res_partner.search(cr, uid, [('xml_id','=','99'),('module','=','F27')], context=context)[0]
         partner_id = values.get('partner_id')
         real_id = values.pop('login_id', None)
         direction = values.get('direction')
