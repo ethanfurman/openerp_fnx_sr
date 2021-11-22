@@ -19,6 +19,7 @@ from openerplib import get_connection, get_records, AttrDict, Many2One, DEFAULT_
 from openerplib.dates import LOCAL_TIME
 from updates.fis_schema import F36, F219
 import os
+import pwd
 import shutil
 import socket
 import time
@@ -41,6 +42,11 @@ SOURCE = Path('%s/var/fis/' % virtualenv)
 ARCHIVE = Path('%s/var/openerp/archive/shipping/' % virtualenv)
 ERRORS = Path('%s/var/openerp/archive/shipping/error' % virtualenv)
 CONFIG = Path('%s/config/fnx.ini' % virtualenv)
+try:
+    OPENERP = tuple(pwd.getpwnam('openerp')[2:4])
+except KeyError:
+    OPENERP = None
+IS_ROOT = os.geteuid() == 0
 
 try:
     settings = OrmFile(CONFIG, section='openerp')
@@ -749,6 +755,8 @@ class MissingFIS(Exception):
 def archive(src_file, dest=ARCHIVE):
     src_file = Path(src_file)
     basename = src_file.filename.split('_')[0]
+    if basename.startswith('SR-'):
+        basename = basename[3:]
     existing = dest.glob(basename+'*')
     existing.sort()
     if not existing or '_' not in existing[-1]:
@@ -758,6 +766,9 @@ def archive(src_file, dest=ARCHIVE):
         count = int(count) + 1
         dst_file += '_%02d' % count
     shutil.move(src_file, dst_file)
+    if IS_ROOT and OPENERP:
+        dst_file.chown(*OPENERP)
+
 
 def construct_datetime(appt_date, appt_time):
     date = time = None
@@ -1330,7 +1341,11 @@ def update_order(values):
             raise
 
 def get_files(source=SOURCE):
-    files = [source/f for f in source.listdir() if f != 'order_template']
+    files = [
+            source/f
+            for f in source.listdir()
+            if f.startswith('SR-') or f.isdigit()
+            ]
     files.sort(key=lambda f: f.stat().st_mtime)
     return files
 
