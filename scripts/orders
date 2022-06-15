@@ -203,7 +203,8 @@ def find_duplicates(remove=False):
             print('\t', dup, verbose=0)
 
 
-@Command()
+@Command(
+        )
 def fix_appts():
     "remove appointment if last set by administrator"
     logger.info('removing appointments set by administrator')
@@ -242,7 +243,8 @@ def fix_appts():
     finally:
         echo('\n%d records updated' % updated)
 
-@Command()
+@Command(
+        )
 def fix_carriers():
     """
     compare OE values for carrier with values in files -- if OE value is '99'
@@ -275,7 +277,8 @@ def fix_carriers():
             OE.fnx_shipping.write([sr.id], pfm(values))
 
 
-@Command()
+@Command(
+        )
 def info():
     logger.info('info()')
     print('loading OPAR', verbose=0)
@@ -342,7 +345,8 @@ def manual_update(**values):
     update_order(PropertyDict(values))
 
 
-@Command()
+@Command(
+        )
 def missing_check():
     logger.info('missing_check()')
     connect_oe(HOST, DB, USER, PW)
@@ -508,7 +512,8 @@ def reprocess(file_to_process, date):
     if failed:
         raise Exception("Unable to re-process orders:\n\t%s" % '\n\t'.join(failed))
 
-@Command()
+@Command(
+        )
 def reprocess_error():
     """
     goes through the errors directory and reprocesses any orders that are
@@ -1218,7 +1223,11 @@ def update_order(values):
     if 'cartons' in values:
         values.cartons = int(values.cartons) or False
     if 'pallets' in values:
-        values.pallets = int(values.pallets) or False
+        # make sure pallets are intetgers, rounding up if necessary
+        try:
+            values.pallets = int(values.pallets) or False
+        except ValueError:
+            values.pallets = int(float(values.pallets) + 1)
     if 'weight' in values:
         values.weight = float(values.weight) or False
     #
