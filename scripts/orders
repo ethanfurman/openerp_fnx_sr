@@ -305,7 +305,7 @@ def info():
     pb = ProgressBar(len(all_orders), message="tallying orders")
     for order in all_orders:
         pb.tick()
-        appt = order.ship_date and order.ship_date[:7] or False
+        appt = order.ship_date and order.ship_date.strftime('%Y-%m') or False
         if order.partner_id and order.partner_id.id in partners and opar.get_subset((partners[order.partner_id[0]], order.local_source_document)):
             month[appt]['opar'] += 1
             totals['opar'] += 1
@@ -316,7 +316,7 @@ def info():
         if order.direction == 'outgoing':
             month[appt][order.state or 'unknown'] += 1
             totals[order.state or 'unknown'] += 1
-        totals[order.direction] += 1
+        totals[order.direction or 'unknown'] += 1
         totals['total'] += 1
     print('        | incoming  outgoing | open a/r | draft  ready  loading  complete  cancelled  unknown | totals', verbose=0)
     print('------- + --------  -------- + -------- + -----  -----  -------  --------  ---------  ------- + ------', verbose=0)
@@ -770,6 +770,7 @@ def archive(src_file, dest=ARCHIVE):
         dst_file, count = existing[-1].split('_')
         count = int(count) + 1
         dst_file += '_%02d' % count
+        dst_file = Path(dst_file)
     shutil.move(src_file, dst_file)
     if IS_ROOT and OPENERP:
         dst_file.chown(*OPENERP)
