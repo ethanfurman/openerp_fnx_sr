@@ -24,6 +24,7 @@
                     @direction
                     @carrier_id
                     @appointment
+                    @ship_date
                     @pallets
                     @cartons
                     @weight

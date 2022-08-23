@@ -89,45 +89,48 @@ def main(host, db, user, pw):
 
 
 @Command(
-        order=('specific order to check', OPTION),
+        orders=('specific order(s) to check', OPTION),
         )
-def order_check(order):
-    orders = defaultdict(list)
-    if order != '*':
-        order += '_*'
-    for file_name in ARCHIVE.glob(order):
-        if '_' not in file_name:
-            continue
-        base, seq = file_name.filename.split('_')
-        orders[int(base)].append(file_name)
-    for order_no in reversed(sorted(orders.keys())):
-        files = orders[order_no]
-        print('checking', order_no)
-        print('  with:\n     %s' % '\n     '.join(sorted(files)), verbose=2)
-        complete_order = load_order(*files)
-        if order != '*':
-            print_table(*complete_order)
-            return
-        pallets_cleared = False
-        for values in reversed(complete_order):
-            if values.get('state') == 'complete':
-                break
-            elif values.get('pallets') == 0:
-                pallets_cleared = True
-            elif values.get('pallets'):
-                if not pallets_cleared:
-                    break
-                # at this point we know that pallets were reset back to zero,
-                # so we can check this order in OpenERP to see if the reset
-                # failed as it should
-                #
-                # print out the progress of the order so we can see how it
-                # evolved
+@Alias('check')
+def order_check(*orders):
+    success = False
+    found_orders = defaultdict(list)
+    for order in orders:
+        for file_name in ARCHIVE.glob(order+'_*'):
+            if '_' not in file_name:
+                continue
+            base, seq = file_name.filename.split('_')
+            found_orders[int(base)].append(file_name)
+        for order_no in reversed(sorted(found_orders.keys())):
+            files = found_orders[order_no]
+            print('checking', order_no)
+            print('  with:\n     %s' % '\n     '.join(sorted(files)), verbose=2)
+            complete_order = load_order(*files)
+            if order != '*':
                 print_table(*complete_order)
-                if get_response('Continue?'):
-                    continue
-                else:
-                    return
+                return
+            pallets_cleared = False
+            for values in reversed(complete_order):
+                if values.get('state') == 'complete':
+                    break
+                elif values.get('pallets') == 0:
+                    pallets_cleared = True
+                elif values.get('pallets'):
+                    if not pallets_cleared:
+                        break
+                    # at this point we know that pallets were reset back to zero,
+                    # so we can check this order in OpenERP to see if the reset
+                    # failed as it should
+                    #
+                    # print out the progress of the order so we can see how it
+                    # evolved
+                    print_table(*complete_order)
+                    if get_response('Continue?'):
+                        continue
+                    else:
+                        return
+    if not success:
+        abort('no order(s) found')
 
 
 @Command(
@@ -374,6 +377,9 @@ def purge(dryrun):
     - more than 1 year old
     """
     logger.info('purge(dryrun=%r)', dryrun)
+    today = Date.today()
+    HALF_YEAR_AGO = today.replace(delta_month=-6)
+    ONE_YEAR_AGO = today.replace(delta_month=-12)
     print('connecting to %s:%s' % (HOST, DB))
     connect_oe(HOST, DB, USER, PW)
     print('loading OPAR')
@@ -381,28 +387,10 @@ def purge(dryrun):
     print('total OPAR records:', len(opar))
     opar_company = fisData(54, subset='%2s')
     print('OPAR possible matches:', len(opar_company.get_subset(('10',))))
-    fields = ['id', 'local_source_document', 'partner_id']
-    print('getting candidate shipped orders')
-    shipped_orders = dict([(o.local_source_document, o)
-            for o in get_records(
-                OE.fnx_shipping,
-                domain=[('direction','=','outgoing'),('state','in',['complete','cancelled']),('appointment_date','<','Month6')],
-                fields=fields,
-                )])
-    print('getting candidate received orders')
-    received_orders = dict([(o.local_source_document, o)
-            for o in get_records(
-                OE.fnx_shipping,
-                domain=[('direction','=','incoming'),('state','in',['complete','cancelled']),('appointment_date','<','Month6')],
-                fields=fields,
-                )])
-    print('getting aged-out incomplete orders')
-    dead_orders = dict([(o.local_source_document, o)
-            for o in get_records(
-                OE.fnx_shipping,
-                domain=['|',('state','=',False),('state','not in',['complete','cancelled']),('appointment_date','<','Month12')],
-                fields=fields,
-                )])
+    fields = [
+            'id', 'local_source_document', 'partner_id', 'state', 'direction',
+            'create_date', 'order_date', 'appointment_date', 'ship_date',
+            ]
     print('getting partner records')
     partners = dict([
             (r.id, r.xml_id)
@@ -411,78 +399,65 @@ def purge(dryrun):
                 fields=['id', 'xml_id'],
                 )
             ])
-    # check each shipped order to make sure it does not have an
-    # open A/R invoice attached
-    pb = ProgressBar(len(shipped_orders)+len(received_orders)+len(dead_orders), message="calculating dead orders")
-    dead_shipped_ids = set()
-    dead_received_ids = set()
+    print('getting candidate shipped orders')
+    save_documents = set()
+    save_documents.add('error')  # don't delete error directory
+    save_ids = set()
     dead_ids = set()
-    dead_files = set()
-    all_dead_ids = set()
-    errors = set()
-    error_count = 0
-    for id_tracker, id_source, check_inv in (
-            (dead_shipped_ids, shipped_orders, True),
-            (dead_received_ids, received_orders, False),
-            (dead_ids, dead_orders, False),
-            ):
-        for local_source_document, record in id_source.items():
-            pb.tick()
+    for order in ViewProgress(get_records(OE.fnx_shipping, fields=fields)):
+        order_date = order.appointment_date or order.ship_date or order.order_date or order.create_date
+        if order.direction == 'outgoing':
+            # check for FIS documents -- keep if any exist
             try:
-                partner = partners[record.partner_id[0]]
+                partner = order.partner_id and partners[order.partner_id[0]]
+                if opar.get_subset((partner, order.local_source_document)):
+                    save_ids.add(order.id)
+                    save_documents.add(order.local_source_document)
+                    continue
             except KeyError:
-                errors.add(record.partner_id[0])
-                error_count += 1
-                continue
-            if check_inv and opar.get_subset((partner, local_source_document)):
-                # open A/R invoices exist
-                continue
-            id_tracker.add(record.id)
-            all_dead_ids.add(record.id)
-    # find dead files
-    # - get all records
-    # - filter to live records
-    # - mark non-live files
-    all_orders = get_records(OE.fnx_shipping, fields=['local_source_document'])
-    live_lsds = set([o.local_source_document for o in all_orders if o.id not in all_dead_ids])
-    # error directory is "live"
-    live_lsds.add('error')
-    # all_order_ids = set([o.id for o in all_orders])
-    # all_order_lsds = set([o.local_source_document for o in all_orders])
+                pass
+        if order.state in ('complete','cancelled'):
+            # keep known processed orders for six months
+            if order_date > HALF_YEAR_AGO:
+                save_ids.add(order.id)
+                if order.direction == 'outgoing':
+                    save_documents.add(order.local_source_document)
+            else:
+                dead_ids.add(order.id)
+        else:
+            # keep unknown orders for a year
+            if order_date > ONE_YEAR_AGO:
+                save_ids.add(order.id)
+                if order.direction == 'outgoing':
+                    save_documents.add(order.local_source_document)
+            else:
+                dead_ids.add(order.id)
     dead_files = []
     for folder in (ARCHIVE, ERRORS):
-        for entry in scandir(folder):
+        count = 0
+        for entry in ViewProgress(scandir(folder)):
+            count += 1
+            print(entry, end=' - ', verbose=3)
             entry = Path(entry.path)
             stem = entry.filename.split('_')[0]
-            days_old = (DateTime.now() - DateTime.fromtimestamp(entry.stat().st_mtime)).days
-            if stem not in live_lsds and days_old > 90:
+            print(stem, end=' - ', verbose=3)
+            if stem not in save_documents:
+                print('    adding', verbose=3)
                 dead_files.append(entry)
-    if errors:
-        error('%d records had %d supplier codes missing from OpenERP (%s)' % (error_count, len(errors), ', '.join([str(e) for e in sorted(errors)])))
+        echo('checked %d files in %s' % (count, folder))
     if dryrun:
-        print('%d shipped candidates' % len(shipped_orders), verbose=0)
-        print('%d dead shipped' % len(dead_shipped_ids), verbose=0)
-        print('%d dead receivables' % len(received_orders), verbose=0)
-        print('%d dead dead' % len(dead_orders), verbose=0)
-        print('%d orphaned files' % len(dead_files), verbose=0)
+        echo('%d records would be deleted' % len(dead_ids))
+        echo('%d files would be deleted' % len(dead_files))
     else:
-        # delete the old stuff
-        if dead_shipped_ids:
-            # starting with the dead shipped
-            print('removing %d shipped orders' % len(dead_shipped_ids))
-            OE.fnx_shipping.unlink(list(dead_shipped_ids))
-        if dead_received_ids:
-            # and the old purchased orders
-            print('removing %d received orders' % len(dead_received_ids))
-            OE.fnx_shipping.unlink(list(dead_received_ids))
         if dead_ids:
-            # and the seriously old stuff
-            print('removing %d very old orders' % len(dead_ids))
-            OE.fnx_shipping.unlink(list(dead_ids))
+            print('removing %d OpenERP records' % len(dead_ids))
+            for ids in ViewProgress(group_100(list(dead_ids))):
+                # delete the openerp records
+                OE.fnx_shipping.unlink(ids)
         if dead_files:
             # and then the interface files
-            print('removing %d orphaned files' % len(dead_files))
-            for entry in dead_files:
+            print('removing %d interface files' % len(dead_files))
+            for entry in ViewProgress(dead_files):
                 entry.unlink()
 
 
@@ -1107,8 +1082,6 @@ def sync_fis(show_missing, reopen, orders):
         try:
             oe_rec = invoices[order_no]
         except KeyError:
-            if not order_no.startswith('C'):
-                error('unable to find', order_no)
             continue
         id = oe_rec.id
         bol = oe_rec.carrier_bill_of_lading
@@ -1444,6 +1417,19 @@ def pfm(values):
             result[k] = v
     return result
 
+def group_100(sequence):
+    "returns sequence (a list) in 100 chunks"
+    if len(sequence) <= 100:
+        return sequence
+    res = []
+    start = 0
+    length = len(sequence)
+    size = length / 100.0
+    for count in range(1, 101):
+        end = int(round(count * size))
+        res.append(sequence[start:end])
+        start = end
+    return res
 
 with user_ids(0, 0):
     Main()

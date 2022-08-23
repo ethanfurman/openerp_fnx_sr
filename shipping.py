@@ -242,6 +242,7 @@ class fnx_sr_shipping(osv.Model):
         'carrier_appt_delivery_date': fields.date('Scheduled Delivery Date'),
         'carrier_actual_delivery_date': fields.date('Actual Delivery Date'),
         'carrier_bill_of_lading': fields.char('Bill of Lading', size=6),
+        'create_date': fields.date('Date order imported'),
         }
 
     _sql_constraints = [ ('lsd_unique', 'unique(local_source_document)', 'Already have that source document in the system') ]
