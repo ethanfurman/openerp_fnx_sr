@@ -17,7 +17,8 @@ from VSS.utils import ProgressBar
 from logging import INFO, getLogger, Formatter, handlers
 from openerplib import get_connection, get_records, AttrDict, Many2One, DEFAULT_SERVER_DATE_FORMAT
 from openerplib.dates import LOCAL_TIME
-from updates.fis_schema import F36, F219
+from fislib.schema import F36, F219
+from traceback import format_exc
 import os
 import pwd
 import shutil
@@ -682,6 +683,12 @@ def update(file, directory=SOURCE, abort_on_error=False):
                 # failing.append('%s: %s' % (file, exc.message or exc.args))
                 dest = ERRORS
                 failures = True
+            except xmlrpclib.Fault as exc:
+                if abort_on_error:
+                    raise
+                dest = None
+                failures=True
+
             except (Exception, ), exc:
                 if abort_on_error:
                     raise
@@ -690,7 +697,6 @@ def update(file, directory=SOURCE, abort_on_error=False):
                 # failing.append('%s: %s' % (file, exc.message or exc.args))
                 dest = None
                 failures = True
-                continue
             if dest:
                 archive(file, dest)
         if failures:
@@ -1287,14 +1293,15 @@ def update_order(values):
         # add all extra info from FIS
         values.update(extra)
         try:
-            print('  creating:\n', values, verbose=2)
+            print('  creating...', end='')
+            print('\n%r' % values, verbose=2)
             OE.fnx_shipping.create(pfm(values), context=dict(context))
-            print('  created')
+            print('  done')
         except xmlrpclib.ProtocolError, exc:
             print('  failed')
             raise BadFormat('Order %s: %s' % (values.local_source_document, (exc)))
         except Exception, exc:
-            print('  failed')
+            print('  failed (%r)' % type(exc))
             error(exc)
             raise
     else:
@@ -1305,9 +1312,10 @@ def update_order(values):
             if setting in oe_record and oe_record[setting] == value:
                 values.pop(setting)
         try:
-            print('  updating:', values.items(), verbose=2)
+            print('  updating...', end='')
+            print('\n%r' % values.items(), verbose=2)
             OE.fnx_shipping.write([oe_record['id']], pfm(values))
-            print('  updated')
+            print('  done')
         except xmlrpclib.ProtocolError, exc:
             print('  failed: ', exc)
             raise BadFormat('Order %s: %s' % (values.local_source_document, (exc)))
@@ -1320,7 +1328,8 @@ def update_order(values):
                 raise
         except Exception, exc:
             print('  failed')
-            error(exc)
+            error(format_exc())
+            error('----------------------------------')
             raise
 
 def get_files(source=SOURCE):

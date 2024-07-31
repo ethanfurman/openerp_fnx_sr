@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # imports
 from collections import OrderedDict
-from dbf import Date, DateTime, Time, RelativeDay
+from dbf.data_types import Date, DateTime, Time, RelativeDay
 from openerplib.dates import str_to_datetime, local_datetime
 from openerp import SUPERUSER_ID
 from openerp.osv import fields, osv

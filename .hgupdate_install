@@ -1,1 +1,2 @@
 scripts/orders --suid
+scripts/orders $legacy --suid
