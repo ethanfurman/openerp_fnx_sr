@@ -206,6 +206,7 @@ class fnx_sr_shipping(osv.Model):
         'weight': fields.float('Weight'),
         'cartons': fields.integer('# of cartons'),
         'pallets': fields.integer('# of pallets'),
+        'total_cube': fields.integer('Total Cube'),
         'comment': fields.text('Comments', help="Comment or instructions for this order only."),
         #
         'carrier_id': fields.many2one('res.partner', 'Shipper', domain=[('is_carrier','=',True)]),

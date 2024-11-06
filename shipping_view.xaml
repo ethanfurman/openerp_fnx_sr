@@ -94,6 +94,7 @@
                                 @weight attrs="{'readonly':True}"
                                 @cartons attrs="{'readonly':True}"
                                 @pallets attrs="{'readonly':True}"
+                                @total_cube attrs="{'readonly':True}"
                                 ~button @button_reset $Clear_Pallet_Count .oe_view_only type='object' states='ready' groups='fnx_sr.group_fnx_sr_manager' .oe_right colspan='2'
                                 ~separator colspan='2'
                                 //@appt_confirmed_on writeonly="groups('fnx_sr.group_fnx_sr_manager')"
