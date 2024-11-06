@@ -669,8 +669,7 @@ def update(file, directory=SOURCE, abort_on_error=False):
             except MissingPartner as exc:
                 if abort_on_error:
                     raise
-                echo()
-                echo('%s: %s (skipping)' % (file.filename, exc.message or exc.args), border='lined')
+                print('%s: %s (skipping)' % (file.filename, exc.message or exc.args), border='lined')
                 dest = None
             except (BadFormat, CancelledOrder, MissingFIS) as exc:
                 if abort_on_error:
@@ -1256,12 +1255,11 @@ def update_order(values):
             extra.ship_date = fix_date(fis_record[F36.ship_date], format='ymd')
         else:
             if oe_record is None and values.get('state') not in ('complete','cancelled'):
-                echo(
+                print(
                         'unable to find invoice %r in FIS'
                             % (values.local_source_document, ),
-                        end='... ',
                         )
-                print('\n   details: %r' % (original_values, ), verbose=2)
+                print('   details: %r\n' % (original_values, ), verbose=1)
     elif direction == 'incoming':
         # purchase order
         found = fis_purchases.get_subset(values.local_source_document)
@@ -1278,7 +1276,7 @@ def update_order(values):
             extra.ship_date = fix_date(fis_record[F219.eta_date], 'ymd')
         else:
             if oe_record is None and values.get('state') not in ('complete','cancelled'):
-                echo(
+                print(
                         'unable to find purchase order %r in FIS'
                             % (values.local_source_document, ),
                         end='... ',
