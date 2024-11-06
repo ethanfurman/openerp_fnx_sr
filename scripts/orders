@@ -1079,25 +1079,36 @@ def sync_fis(show_missing, reopen, orders):
         for r in get_records(
             OE.fnx_shipping,
             domain=[('local_source_document','in',order_nos)],
-            fields=['id','carrier_bill_of_lading','local_source_document'],
+            fields=['id','carrier_bill_of_lading','local_source_document','total_cube'],
             )])
     bol_update = 0
+    cube_update = 0
     for order in fis_orders.values():
+        vals = {}
         order_no = order[F36.order_no]
         try:
             oe_rec = invoices[order_no]
         except KeyError:
             continue
         id = oe_rec.id
-        bol = oe_rec.carrier_bill_of_lading
-        if bol != order[F36.bol_no]:
-            OE.fnx_shipping.write(id, {'carrier_bill_of_lading': order[F36.bol_no]})
+        oe_bol = oe_rec.carrier_bill_of_lading
+        oe_cube = oe_rec.total_cube
+        fis_bol = order[F36.bol_no]
+        fis_cube = order[F36.total_cube]
+        if oe_bol != fis_bol:
+            vals['carrier_bill_of_lading'] = fis_bol
             bol_update += 1
+        if oe_cube != fis_cube:
+            vals['total_cube'] = fis_cube
+            cube_update += 1
+        if vals:
+            OE.fnx_shipping.write(id, vals)
 
     print('completed %d orders' % len(completed))
     print('cancelled %d orders' % len(cancelled))
     print('dates synced with FIS:', changed_shipping)
     print('BoL updates: %d' % bol_update)
+    print('Cube updates: %d' % cube_update)
     if reopen:
         print('reopened %d orders' % len(reopened))
     if show_missing:
