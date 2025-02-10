@@ -10,7 +10,7 @@ from openerp.tools import DEFAULT_SERVER_DATE_FORMAT, DEFAULT_SERVER_DATETIME_FO
 from openerp.tools.misc import OrderBy
 from textwrap import dedent
 import pytz
-from VSS.utils import float, hrtd
+from fislib.utils import float, hrtd
 import logging
 import re
 

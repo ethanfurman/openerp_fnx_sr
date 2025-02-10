@@ -1,6 +1,5 @@
 #!/usr/local/sbin/suid-python --virtualenv
 
-# setup
 from __future__ import print_function
 
 from collections import defaultdict
@@ -9,11 +8,10 @@ from aenum import Enum, IntEnum
 from pandaemonium import PidLockFile, AlreadyLocked
 from scandir import scandir
 from scription import *
-from VSS.BBxXlate.fisData import fisData
-from VSS.utils import fix_date, date
+from fislib.BBxXlate.fisData import fisData
+from fislib.utils import fix_date, date
 from antipathy import Path
-from VSS.time_machine import PropertyDict
-from VSS.utils import ProgressBar
+from fislib.collections import AttrDict
 from logging import INFO, getLogger, Formatter, handlers
 from openerplib import get_connection, get_records, AttrDict, Many2One, DEFAULT_SERVER_DATE_FORMAT
 from openerplib.dates import LOCAL_TIME
@@ -63,10 +61,9 @@ else:
     DB = settings.db
     PW = settings.pw
 
-# set later
 draft = scheduled = appt = ready = checked_in = complete = cancelled = None
 
-# API
+## API
 @Script(
         host=('host where OpenERP instance is running', OPTION, None),
         db=('database to use', OPTION, None),
@@ -135,6 +132,20 @@ def order_check(*orders):
 
 
 @Command(
+        date=Spec('date to examine', OPTION, type=Date, radio='date'),
+        email=Spec('send email to these addresses', MULTI),
+        yesterday=Spec('examine yesterday', FLAG, target='date', radio='date', default=Date.today().replace(delta_day=-1)),
+        )
+def daily_digest(date, email):
+    """
+    print list of orders sent to FIS, and their detail
+    """
+    target = date or Date.today()
+    print('target date: %r' % (target, ))
+    target_period = Period(target.year, target.month, target.day)
+    print('       period: %r' % (target_period, ))
+
+@Command(
         remove=('remove identical duplicates', 'flag', ),
         )
 def find_duplicates(remove=False):
@@ -146,10 +157,8 @@ def find_duplicates(remove=False):
     duplicates = list()
     removed = list()
     removed_ids = list()
-    pb = ProgressBar(len(records), message="processing %d records" % len(records))
-    for sr in records:
-        pb.tick()
-        sr = PropertyDict(sr)
+    for sr in ViewProgress(records, "processing $total records"):
+        sr = AttrDict(sr)
         if sr.local_source_document in order_numbers:
             duplicates.append(sr.local_source_document)
         else:
@@ -159,14 +168,12 @@ def find_duplicates(remove=False):
     else:
         print('\n%d duplicates found in %d orders:\n' % (len(duplicates), len(records)), verbose=0)
         if remove:
-            pb = ProgressBar(len(duplicates), message='checking %d records' % len(duplicates))
-            for dup in duplicates:
-                pb.tick()
+            for dup in ViewProgress(duplicates, 'checking $total records'):
                 dups = OE.fnx_shipping.search_read(domain=[('local_source_document','=',dup)])
                 if len(dups) > 2:
                     continue
-                d0 = PropertyDict(dups[0])
-                d1 = PropertyDict(dups[1])
+                d0 = AttrDict(dups[0])
+                d1 = AttrDict(dups[1])
                 d0_state = OrderState[d0.state]
                 d1_state = OrderState[d1.state]
                 d0_msgs = len(d0.message_ids)
@@ -265,12 +272,10 @@ def fix_carriers():
     shipping_records = OE.fnx_shipping.search_read(
             fields=['id','carrier_id','local_source_document'],
             domain=['|',('carrier_id.id','=',unknown_id),('carrier_id','=',False)])
-    pb = ProgressBar(len(shipping_records), message="processing %d records" % len(shipping_records))
-    for sr in shipping_records:
-        pb.tick()
-        sr = PropertyDict(sr)
+    for sr in ViewProgress(shipping_records, "processing $total records"):
+        sr = AttrDict(sr)
         source_files = sorted((ARCHIVE / sr.local_source_document + '*').glob())
-        order = PropertyDict()
+        order = AttrDict()
         for sf in source_files:
             settings = get_order(sf)
             order.update(settings)
@@ -306,9 +311,7 @@ def info():
             )
     month = defaultdict(lambda: dict(total=0, outgoing=0, incoming=0, opar=0, draft=0, ready=0, loading=0, complete=0, cancelled=0, unknown=0))
     totals = dict(total=0, outgoing=0, incoming=0, opar=0, draft=0, ready=0, loading=0, complete=0, cancelled=0, unknown=0)
-    pb = ProgressBar(len(all_orders), message="tallying orders")
-    for order in all_orders:
-        pb.tick()
+    for order in ViewProgress(all_orders, "tallying orders"):
         appt = order.ship_date and order.ship_date.strftime('%Y-%m') or False
         if order.partner_id and order.partner_id.id in partners and opar.get_subset((partners[order.partner_id[0]], order.local_source_document)):
             month[appt]['opar'] += 1
@@ -346,7 +349,7 @@ def manual_update(**values):
     lc = values.pop('local_contact', None)
     if lc is not None:
         values['local_contact'] = lc.split(',')
-    update_order(PropertyDict(values))
+    update_order(AttrDict(values))
 
 
 @Command(
@@ -707,8 +710,9 @@ def update(file, directory=SOURCE, abort_on_error=False):
             lock.release()
 
 
-# helpers
-OE = PropertyDict()
+## helpers
+
+OE = AttrDict()
 
 fis_module = {
     'incoming': 'F163',
@@ -988,7 +992,7 @@ def sync_fis(show_missing, reopen, orders):
         ):
         found = fis_orders.get_subset(order.local_source_document)
         for key, record in found:
-            fis_data = PropertyDict()
+            fis_data = AttrDict()
             # will only be one record
             try:
                 fis_ship_date = fix_date(record[F36.ship_date], format='ymd')
@@ -1249,7 +1253,7 @@ def update_order(values):
     #
     # find matching FIS record and grab needed values
     #
-    extra = PropertyDict()
+    extra = AttrDict()
     if direction == 'outgoing':
         # invoice
         found = fis_orders.get_subset(values.local_source_document)
